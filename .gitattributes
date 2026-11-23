@@ -1,0 +1,9 @@
+# Every text file uses LF line endings, on every system (WoW and the tests don't need CRLF).
+* text=auto eol=lf
+
+# Textures and pictures are binary.
+*.tga binary
+*.png binary
+*.jpg binary
+*.blp binary
+*.zip binary

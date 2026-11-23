@@ -1,0 +1,38 @@
+-- Written by tools/textures.py: each texture in Media/ and the box of its own
+-- local units it covers, as { path, x0, y0, x1, y1 } (x0, y0 is the top-left pixel).
+local ADDON, ns = ...
+
+ns.RenderMedia = {
+  Circle = { "Interface\\AddOns\\PintoTGD\\Media\\Circle", -1.0667, -1.0667, 1.0667, 1.0667 },
+  CoinLoose = { "Interface\\AddOns\\PintoTGD\\Media\\CoinLoose", -9.1429, -4.5714, 9.1429, 4.5714 },
+  CoinRimGold = { "Interface\\AddOns\\PintoTGD\\Media\\CoinRimGold", -9.1429, -4.5714, 9.1429, 4.5714 },
+  CoinRimPale = { "Interface\\AddOns\\PintoTGD\\Media\\CoinRimPale", -9.1429, -4.5714, 9.1429, 4.5714 },
+  FangFill = { "Interface\\AddOns\\PintoTGD\\Media\\FangFill", 84.0000, -14.0000, 100.0000, 2.0000 },
+  FangStroke = { "Interface\\AddOns\\PintoTGD\\Media\\FangStroke", 84.0000, -14.0000, 100.0000, 2.0000 },
+  FinFill = { "Interface\\AddOns\\PintoTGD\\Media\\FinFill", -31.3333, -44.9271, 11.3333, -2.2604 },
+  FinStroke = { "Interface\\AddOns\\PintoTGD\\Media\\FinStroke", -31.3333, -44.9271, 11.3333, -2.2604 },
+  GemBlue = { "Interface\\AddOns\\PintoTGD\\Media\\GemBlue", -9.1429, -9.1429, 9.1429, 9.1429 },
+  GemGreen = { "Interface\\AddOns\\PintoTGD\\Media\\GemGreen", -9.1429, -9.1429, 9.1429, 9.1429 },
+  GemRed = { "Interface\\AddOns\\PintoTGD\\Media\\GemRed", -9.1429, -9.1429, 9.1429, 9.1429 },
+  Haunch = { "Interface\\AddOns\\PintoTGD\\Media\\Haunch", -18.3333, -23.3333, 24.3333, 19.3333 },
+  HeadFill = { "Interface\\AddOns\\PintoTGD\\Media\\HeadFill", -31.8285, -72.5553, 138.8382, 12.7780 },
+  HeadOutline = { "Interface\\AddOns\\PintoTGD\\Media\\HeadOutline", -31.8285, -72.5553, 138.8382, 12.7780 },
+  Heart = { "Interface\\AddOns\\PintoTGD\\Media\\Heart", -9.1429, -11.1429, 9.1429, 7.1429 },
+  Hoard = { "Interface\\AddOns\\PintoTGD\\Media\\Hoard", 0.0000, 232.0000, 1024.0000, 488.0000 },
+  HornBackFill = { "Interface\\AddOns\\PintoTGD\\Media\\HornBackFill", -30.6667, -82.8333, 54.6667, -40.1667 },
+  HornBackStroke = { "Interface\\AddOns\\PintoTGD\\Media\\HornBackStroke", -30.6667, -82.8333, 54.6667, -40.1667 },
+  HornFrontFill = { "Interface\\AddOns\\PintoTGD\\Media\\HornFrontFill", -40.6667, -73.6497, 44.6667, -30.9831 },
+  HornFrontStroke = { "Interface\\AddOns\\PintoTGD\\Media\\HornFrontStroke", -40.6667, -73.6497, 44.6667, -30.9831 },
+  JawFill = { "Interface\\AddOns\\PintoTGD\\Media\\JawFill", -29.4632, -28.8333, 141.2035, 13.8333 },
+  JawOutline = { "Interface\\AddOns\\PintoTGD\\Media\\JawOutline", -29.4632, -28.8333, 141.2035, 13.8333 },
+  MinimapHead = { "Interface\\AddOns\\PintoTGD\\Media\\MinimapHead", -14.0000, -84.0000, 116.0000, 46.0000 },
+  Mote = { "Interface\\AddOns\\PintoTGD\\Media\\Mote", -1.0000, -1.0000, 1.0000, 1.0000 },
+  PawClaws = { "Interface\\AddOns\\PintoTGD\\Media\\PawClaws", -29.0000, -16.0000, 35.0000, 16.0000 },
+  PawClawsStroke = { "Interface\\AddOns\\PintoTGD\\Media\\PawClawsStroke", -29.0000, -16.0000, 35.0000, 16.0000 },
+  PawFill = { "Interface\\AddOns\\PintoTGD\\Media\\PawFill", -29.0000, -16.0000, 35.0000, 16.0000 },
+  PawStroke = { "Interface\\AddOns\\PintoTGD\\Media\\PawStroke", -29.0000, -16.0000, 35.0000, 16.0000 },
+  QuestMark = { "Interface\\AddOns\\PintoTGD\\Media\\QuestMark", -32.0000, -32.0000, 32.0000, 32.0000 },
+  SpadeFill = { "Interface\\AddOns\\PintoTGD\\Media\\SpadeFill", -12.3333, -21.3333, 30.3333, 21.3333 },
+  SpadeStroke = { "Interface\\AddOns\\PintoTGD\\Media\\SpadeStroke", -12.3333, -21.3333, 30.3333, 21.3333 },
+  Tri = { "Interface\\AddOns\\PintoTGD\\Media\\Tri", 0.0000, 0.0000, 256.0000, 256.0000 },
+}

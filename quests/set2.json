@@ -1,0 +1,105 @@
+{
+  "set": 2,
+  "templates": [
+    {
+      "id": 201, "worth": 2, "who": "anyone",
+      "text": "Ask {X}, a guild crafter, to make you something you can use, and group up to farm the materials together. It completes when {X} hands it over.",
+      "names": [{"role": "X", "rules": [["online", 3], ["crafter"]]}],
+      "goal": [["group", {"with": "X"}], ["receive", {"from": "X", "kind": "crafted"}]]
+    },
+    {
+      "id": 202, "worth": 2, "who": "anyone",
+      "text": "Give {X} a recipe they can learn, and do a quest or a dungeon together.",
+      "names": [{"role": "X", "rules": [["online", 3], ["professional"]]}],
+      "goal": [["give", {"to": "X", "kind": "recipe"}], ["group", {"with": "X", "act": ["quest", "dungeon"]}]]
+    },
+    {
+      "id": 203, "worth": 2, "who": "gatherers, and anyone for cloth",
+      "text": "Gather or loot 20 ore, herbs, leather or cloth with {X} in your group, and give them to {X} for their profession.",
+      "names": [{"role": "X", "rules": [["online", 3], ["uses_materials"]]}],
+      "goal": [
+        ["gather", {"count": 20, "kinds": ["loot:ore", "loot:herb", "loot:leather", "loot:cloth"], "with": "X"}],
+        ["give", {"to": "X", "kind": "materials", "count": 20}]
+      ]
+    },
+    {
+      "id": 204, "worth": 1, "who": "gatherers",
+      "text": "Gather together: mine, pick herbs or skin 10 times while you're grouped with a guildie in the same zone.",
+      "needs": [["gatherer"]],
+      "goal": [["gather", {"count": 10, "kinds": ["herb", "mine", "skin"]}]]
+    },
+    {
+      "id": 205, "worth": 1, "who": "anyone with Fishing",
+      "text": "Fish with a guildie: catch 10 fish while you're grouped in the same zone.",
+      "needs": [["secondary", "fish"]],
+      "goal": [["gather", {"count": 10, "kinds": ["fish"]}]]
+    },
+    {
+      "id": 206, "worth": 2, "who": "tailors and leatherworkers",
+      "text": "Give a bag you made to a new member, and do a quest or a dungeon with them.",
+      "needs": [["profession", ["Tailoring", "Leatherworking"]], ["established"], ["exists", "@new"]],
+      "goal": [
+        ["give", {"to": "@new", "kind": "crafted", "tags": ["bag"], "bind": "@B"}],
+        ["group", {"with": "@B", "act": ["quest", "dungeon"]}]
+      ]
+    },
+    {
+      "id": 207, "worth": 2, "who": "blacksmiths, leatherworkers, tailors and engineers",
+      "text": "Make an upgrade for a low-gear member: gear that beats what they wear in that slot. Then run a dungeon with them and at least one more guildie.",
+      "needs": [["profession", ["Blacksmithing", "Leatherworking", "Tailoring", "Engineering"]], ["level", 13], ["exists", "@low"]],
+      "goal": [
+        ["give", {"to": "@low", "kind": "crafted", "upgrade": true, "bind": "@L"}],
+        ["dungeon", {"with": "@L", "guildies": 2}]
+      ]
+    },
+    {
+      "id": 208, "worth": 2, "who": "enchanters",
+      "text": "Enchant a piece of gear for 2 guildies, and run a dungeon with both of them.",
+      "needs": [["profession", ["Enchanting"]], ["level", 13]],
+      "goal": [
+        ["give", {"kind": "enchant", "distinct": 2, "bind": "@E"}],
+        ["dungeon", {"with": "@E", "need": 2}]
+      ]
+    },
+    {
+      "id": 209, "worth": 2, "who": "anyone with First Aid",
+      "text": "Patch up the party: run a dungeon with at least 2 guildies, and bandage 2 of them along the way.",
+      "needs": [["secondary", "aid"], ["level", 13]],
+      "goal": [["dungeon", {"guildies": 2, "bandaged": 2}]]
+    },
+    {
+      "id": 210, "worth": 2, "who": "anyone with Cooking",
+      "text": "Cook for the gang: give a dish you cooked to 3 guildies, and do quests or a dungeon with all 3 in your group.",
+      "needs": [["secondary", "cook"]],
+      "goal": [
+        ["give", {"kind": "crafted", "tags": ["food"], "distinct": 3, "bind": "@C"}],
+        ["group", {"with": "@C", "need": 3, "act": ["quest", "dungeon"]}]
+      ]
+    },
+    {
+      "id": 211, "worth": 3, "who": "crafters",
+      "text": "Make something useful for 3 different guildies this week, and do a quest or a dungeon with each of them.",
+      "needs": [["crafter"]],
+      "goal": [
+        ["give", {"kind": "crafted", "distinct": 3, "bind": "@M"}],
+        ["group", {"with": "@M", "need": 3, "each": true, "act": ["quest", "dungeon"]}]
+      ]
+    },
+    {
+      "id": 212, "worth": 3, "who": "alchemists",
+      "text": "Bring potions or elixirs you made to a dungeon run with a full party of guildies, and give some to each of them.",
+      "needs": [["profession", ["Alchemy"]], ["level", 13]],
+      "goal": [["dungeon", {"guildies": 4, "gave": "potion"}]]
+    }
+  ],
+  "finalBosses": [
+    "Bazzalan", "Jergosh the Invoker", "Taragaman the Hungerer",
+    "Mutanus the Devourer", "Edwin VanCleef", "Archmage Arugal", "Aku'mai", "Bazil Thredd",
+    "Mekgineer Thermaplugg", "Charlga Razorflank", "Bloodmage Thalnos", "Arcanist Doan", "Herod",
+    "High Inquisitor Whitemane", "Amnennar the Coldbringer", "Archaedas", "Chief Ukorz Sandscalp",
+    "Princess Theradras", "Shade of Eranikus", "Emperor Dagran Thaurissan", "Overlord Wyrmthalak",
+    "General Drakkisath", "Alzzin the Wildshaper", "Prince Tortheldrin", "King Gordok",
+    "Darkmaster Gandling", "Baron Rivendare", "Balnazzar"
+  ],
+  "finalBossIds": [2755]
+}

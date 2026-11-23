@@ -1,0 +1,47 @@
+## Interface: 16001
+## Title: Pinto, the Girthy Dragon
+## Notes: The Girthy Dragons' social health, as a dragon on a gold hoard.
+## Author: The Girthy Dragons
+## Version: 0.0.0
+## SavedVariables: PintoTGD_DB
+## IconTexture: Interface\AddOns\PintoTGD\Media\MinimapHead
+
+Core\Build.lua
+Core\Init.lua
+Core\Compat.lua
+Core\Util.lua
+Core\Time.lua
+Sync\Bytes.lua
+Sync\Crypto.lua
+Data\Pieces.lua
+Data\Migrations.lua
+Data\Store.lua
+Sync\Comm.lua
+Sync\Protocol.lua
+Sync\Release.lua
+Track\Roster.lua
+Data\People.lua
+Track\Player.lua
+Track\Log.lua
+Track\Activity.lua
+Track\Trades.lua
+Health\Formula.lua
+Health\Health.lua
+Quests\Blocks.lua
+Quests\Pack.lua
+Quests\PackData.lua
+Quests\Quests.lua
+Quests\Officer.lua
+Render\MediaData.lua
+Render\Draw.lua
+Render\Pinto.lua
+UI\Frames.lua
+UI\Minimap.lua
+UI\Windows.lua
+UI\QuestList.lua
+UI\EatChain.lua
+UI\Popups.lua
+UI\OfficerTab.lua
+UI\Debug.lua
+UI\UI.lua
+Main.lua

@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Pinto Probe
+## Notes: Checks what the WoW: Forever client offers Pinto. Type /pintoprobe.
+## Version: 3
+## SavedVariables: PintoProbeDB
+
+Crypto.lua
+Probe.lua

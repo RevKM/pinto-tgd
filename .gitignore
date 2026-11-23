@@ -1,0 +1,32 @@
+# Build output: the built addon and its zip, made by tools/build.py. Releases go up as zips.
+dist/
+
+# Signing keys never leave this folder: addons only trust what these keys have signed.
+keys/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# The key to the saved data's encoding stays in this folder too (see PLAN.md, "Local data
+# and transparency").
+docs/format.md
+
+# Secrets and local settings
+.env
+.env.*
+secrets/
+*.local.json
+
+# Test output and Python's caches
+tools/sim/out/
+__pycache__/
+*.pyc
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
