@@ -6,5 +6,6 @@
   "questPack": 2,
   "goLive": "2026-11-23",
   "important": false,
-  "releaseUrl": "https://github.com/RevKM/pinto-tgd/releases/latest"
+  "releaseUrl": "https://github.com/RevKM/pinto-tgd/releases/latest",
+  "publicKey": "93cc56625ae84a5133fa7c515e04b38a1d89c17f5e9f92bc887deab9bbb5216a"
 }

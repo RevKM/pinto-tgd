@@ -26,6 +26,7 @@ The addon is plain, readable Lua in `src/PintoTGD/`. The build ships it as is, a
 - **What it records** (`Track/`): who from the guild you group with, dungeon runs and boss kills, trades with guildies that help a quest, the days and rough hours you play, and your characters' levels, gear item levels, professions and gold bracket. It does this ONLY to the ends of feeding Pinto. Pinto does not read the combat log.
 - **Saved data** in `PintoTGD_DB` is compactly encoded (`Data/`). The code itself is left unobfuscated for transparency.
 - **Signed updates.** Quest packs and release notices are signed, and addons check them with Ed25519 in plain Lua (`Sync/Crypto.lua`) against the public key in `Core/Build.lua`.
+- **Built in the open.** GitHub builds each release's zip from its tagged source (`.github/workflows/release.yml`). Only the signatures come from the maintainer's PC (`tools/signatures.json`), and they check out against the public key in `tools/release.json`.
 - **It leaves the game's UI alone.** Pinto draws in its own frames and adds nothing to the game but its `/pinto` command and Escape-to-close entries for its windows. An offline test checks this.
 
 ## More

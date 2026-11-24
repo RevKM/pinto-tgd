@@ -1,0 +1,66 @@
+# Publishes each new Pinto release when it's pushed.
+#
+# release.cmd (tools/release.py) makes a release ready on the maintainer's PC, where the
+# key is: it signs the quest pack and the release stamp there and writes the signatures to
+# tools/signatures.json. When a push brings signatures for a version that isn't out yet,
+# this builds that release from the pushed source with them (tools/build.py publish, which
+# checks them against the public key in tools/release.json), publishes it as a GitHub
+# release with the zip, and sends it to CurseForge (curseforge.yml). No key comes here,
+# and anyone can see each release was built from its tagged source.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Are the signatures for a version that isn't out yet?
+        id: check
+        run: |
+          version=$(python3 -c 'import json, os; p = "tools/signatures.json"; print(json.load(open(p))["version"] if os.path.exists(p) else "")')
+          if [ -z "$version" ]; then
+            echo "No signatures yet: nothing to publish."
+          elif gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "v$version is out already: nothing to publish."
+          else
+            echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build it from this commit, with the signatures
+        if: steps.check.outputs.tag != ''
+        run: python3 tools/build.py publish
+
+      - name: Publish it on GitHub
+        if: steps.check.outputs.tag != ''
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          gh release create "$TAG" "dist/PintoTGD-${TAG#v}.zip" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "The AddOn ($TAG)" --notes-file dist/README.md
+
+  # a release this workflow makes doesn't start other workflows by itself, so it calls the
+  # CurseForge one
+  curseforge:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/curseforge.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    secrets: inherit

@@ -1,5 +1,7 @@
 """Pinto's changelog, CHANGELOG.md: every release's changes, newest first, each under a
-heading "## <version>". The release build puts a release's changes in the README's
+heading "## <version>". The newest heading is the next release's version (tools/release.py),
+and "## <version> (important)" marks a fix everyone needs: older copies then ask for the
+update at every login. The release build puts a release's changes in the README's
 "What's new" and on its release page, and the CurseForge upload sends them as the file's
 changelog.
 
@@ -10,7 +12,17 @@ import re
 import sys
 
 PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CHANGELOG.md")
-HEADING = re.compile(r"^## +(\S+)")
+HEADING = re.compile(r"^## +(\S+)(.*)$")
+
+
+def headings(text):
+    """[(version, the rest of its heading)] in the file's order, newest first."""
+    return [(m.group(1), m.group(2).strip()) for m in map(HEADING.match, text.splitlines()) if m]
+
+
+def important(text, version):
+    """Whether the version's heading marks it as important."""
+    return any(v == version and "important" in rest.lower() for v, rest in headings(text))
 
 
 def sections(text):

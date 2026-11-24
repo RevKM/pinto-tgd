@@ -30,17 +30,22 @@ tools/
   build.py          builds dist/ and signs the quest pack and release stamp
   ed25519.py        signing in pure Python (RFC 8032)
   changelog.py      reads a release's changes from CHANGELOG.md
+  release.py        makes the next release ready to push (release.cmd runs it)
+  signatures.json   the newest release's signatures, for GitHub's build of it
   curseforge.py     uploads a release zip to CurseForge, for .github/workflows/curseforge.yml
   textures.py       draws the TGA textures in Media/
   backdrop.py       makes Media/Cave.tga and its fade mask from art/cave.png
-  release.json      the release: version, go-live date, quest pack number and update link
+  release.json      the release: version, go-live date, quest pack number, update link and
+                    the release key's public half
   test.json         a running test's dates, for test and beta builds: go-live and wake-up
   art/              source pictures: the cave
   probe/            the probe addon (milestone 0)
   sim/              offline tests: compat.lua, harness.lua, run.lua, wow.lua (WoW API stubs),
                     uistub.lua (UI widget stubs), test_*.lua
-.github/workflows/  curseforge.yml: sends each published GitHub release to CurseForge
+.github/workflows/  release.yml: builds and publishes each new release when it's pushed;
+                    curseforge.yml: sends each published release to CurseForge
 CHANGELOG.md        every release's changes, newest first
+release.cmd         double-click to make the next release ready (tools/release.py)
 dist/               build output, kept out of git (releases go up as zips)
 ```
 
@@ -89,14 +94,20 @@ The stand-in client (`tools/sim/wow.lua`) follows what's known about Forever's:
 
 ## Releases
 
-`python tools/build.py release` builds the release that `tools/release.json` describes into `dist/PintoTGD`, signs its quest pack and release stamp with `keys/release.key`, and zips it as `dist/PintoTGD-<version>.zip` for its GitHub release. `dist/README.md` is the text for the release page. A release build has neither of the flags under Test builds: no test tools, and the guild's real data.
-- **The changelog.** A release's changes go in `CHANGELOG.md` first, under `## <version>`, newest first, in words for players. The release build stops without them. It writes them into the README's "What's new" block (between the `whats-new` markers), so GitHub's front page shows the newest release's changes, and at the top of `dist/README.md`; the CurseForge upload sends them as the file's changelog. Commit the README the build changed with the release.
-- **The release key** is made once, with `python tools/ed25519.py keygen keys/release.key`. That prints only the public key and never overwrites a key file. Keep a backup somewhere private: without the key, nothing new can be signed that installed copies trust.
-- **A new release** raises `version`, and `questPack` when `quests/` changes. `dataVersion` and `protocolVersion` go up only with a new migration contract or message format; older copies then show the "update needed" popup at every login, as they do for a release built with `--important`.
+To release:
+1. Write the changes in `CHANGELOG.md`, in words for players, under a new heading at the top: `## <version>`, or `## <version> (important)` for a fix everyone needs.
+2. Double-click `release.cmd` (`tools/release.py`). It sets `tools/release.json` to that version, and the dev build in `src/` with it. Then it runs the offline tests, builds and signs the release (`python tools/build.py release`) and offers to put it in the AddOns folder.
+3. Commit and push. On GitHub, the Release workflow (`.github/workflows/release.yml`) builds the same release from the pushed source, publishes it with its zip, and sends it to CurseForge.
+
+The release is `dist/PintoTGD`, zipped as `dist/PintoTGD-<version>.zip`, and `dist/README.md` is the release page's text. A release build has neither of the flags under Test builds: no test tools, and the guild's real data.
+- **The changelog.** The release build stops without the version's changes. It writes them into the README's "What's new" block (between the `whats-new` markers), so GitHub's front page shows the newest release's changes, and at the top of the release page's text. The CurseForge upload sends them as the file's changelog.
+- **The release key** is made once, with `python tools/ed25519.py keygen keys/release.key`. That prints only the public key and never overwrites a key file. Keep a backup somewhere private: without the key, nothing new can be signed that installed copies trust. Its public half is `publicKey` in `tools/release.json`, and the release build refuses any other key.
+- **The signatures.** `build.py release` writes the quest pack's and the release stamp's signatures to `tools/signatures.json`, which is committed: signatures are public, and only the key makes them. GitHub's `build.py publish` builds the release from the pushed source with them, checking them against `publicKey`. It stops if anything signed changed after `release.cmd` ran, and then `release.cmd` needs to run again. So the key never leaves this PC, and each release's zip was built from its tagged source, where anyone can check it.
+- **A new release** raises `version` (`release.cmd` does that), and `questPack` when `quests/` changes. `dataVersion` and `protocolVersion` go up only with a new migration contract or message format; older copies then show the "update needed" popup at every login, as they do for an important release.
 - **Older copies always hear of a newer release**, even one they can't sync with. Copies on different data or protocol versions don't sync, so the newest stamp goes to an older copy on its own, in a STAMP message (`Release.Offer`), after its hello. From there it spreads to copies on that copy's version in their sync. Hellos and STAMP messages are the two messages every version reads: they always go out under protocol version 1 (`Comm.FROZEN_PROTOCOL`) and every version reads them under it. They're frozen. A new protocol version keeps sending and reading them exactly as they are. A hello only ever grows at its end, and neither may need more than one message.
 - **`goLive` never changes** after the launch: every copy counts the guild's days and weeks from it.
 - **The update link** (`releaseUrl`) is built into each release; stamps don't carry one. The popup shows the link of the copy the player has.
-- **CurseForge** gets each release too. Publishing a GitHub release, with the zip attached, runs `.github/workflows/curseforge.yml`. It hands the zip to `tools/curseforge.py`, which checks that it's a signed release build of the release's version and uploads it with that version's changes from `CHANGELOG.md`. Nothing is built there, so the signing key stays on this PC. It needs the repository secret `CF_API_TOKEN` and the variable `CF_PROJECT_ID`, and finds the game version from the `.toc`'s `## Interface`. Pre-releases stay on GitHub. GitHub runs the workflow from the tagged commit, so it only runs for tags made after it was committed; for an older release, run it by hand with the release's tag.
+- **CurseForge** gets each release too. The Release workflow calls `.github/workflows/curseforge.yml` once it has published a release, and a release published by hand runs it as well. It hands the release's zip to `tools/curseforge.py`, which checks that it's a signed release build of the release's version and uploads it with that version's changes from `CHANGELOG.md`. It needs the repository secret `CF_API_TOKEN` and the variable `CF_PROJECT_ID`, and finds the game version from the `.toc`'s `## Interface`. Pre-releases stay on GitHub. To send a release that's already out, run it by hand with the release's tag.
 
 ## Test builds
 

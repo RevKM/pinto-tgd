@@ -19,15 +19,21 @@
   python tools/build.py probe
       The probe addon (milestone 0) in dist/PintoProbe. See tools/probe/README.md.
 
-  python tools/build.py release [--version X.Y.Z] [--go-live YYYY-MM-DD] [--wake-up YYYY-MM-DD]
-                                [--important]
+  python tools/build.py release
       A release build in dist/, signed with keys/release.key, and zipped as
-      dist/PintoTGD-<version>.zip for the GitHub release. Defaults come from
-      tools/release.json. Make the release key once with:
+      dist/PintoTGD-<version>.zip. Everything about it comes from tools/release.json, so
+      GitHub builds the same; tools/release.py (release.cmd) sets the version there from
+      CHANGELOG.md. Make the release key once with:
           python tools/ed25519.py keygen keys/release.key
-      and keep a backup: addons only trust what this key has signed.
-      CHANGELOG.md must have the version's changes, under "## <version>": the build puts
-      them in the README's "What's new" block and on the release page.
+      and keep a backup: addons only trust what this key has signed. Its public half must
+      be release.json's publicKey. CHANGELOG.md must have the version's changes, under
+      "## <version>": the build puts them in the README's "What's new" block and on the
+      release page. The signatures go in tools/signatures.json, to commit.
+
+  python tools/build.py publish
+      The same release build without the key, for GitHub (.github/workflows/release.yml):
+      it takes the signatures from tools/signatures.json and checks them against
+      release.json's publicKey, so it fails if anything signed changed since.
 
 dist/PintoTGD gets the .toc, every file the .toc lists and Media/. dist/README.md is the
 text for the release page: what's new, how to install it and what Pinto is.
@@ -53,6 +59,7 @@ RELEASE = os.path.join(ROOT, "tools", "release.json")
 TEST = os.path.join(ROOT, "tools", "test.json")
 CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
 README_MAIN = os.path.join(ROOT, "README.md")
+SIGNATURES = os.path.join(ROOT, "tools", "signatures.json")
 
 PACK_FORMAT = 1
 
@@ -152,6 +159,34 @@ def load_key(name, create):
     with open(path) as f:
         seed = bytes.fromhex(f.read().strip())
     return seed, ed25519.publickey(seed)
+
+
+# A release's signatures, made where the key is and committed, so GitHub can build the
+# same release without it. Signatures are data anyone may see: only the key makes them.
+
+def write_signatures(cfg, pack_sig, stamp_sig):
+    doc = {"version": cfg["version"], "questPack": cfg["questPack"],
+           "packSig": pack_sig.hex(), "stampSig": stamp_sig.hex()}
+    with open(SIGNATURES, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(doc, indent=2) + "\n")
+    print("wrote the signatures to", os.path.relpath(SIGNATURES, ROOT))
+
+
+def load_signatures(cfg, public, data):
+    if not os.path.exists(SIGNATURES):
+        sys.exit("No tools/signatures.json: release.cmd makes it.")
+    with open(SIGNATURES, encoding="utf-8") as f:
+        doc = json.load(f)
+    if doc.get("version") != cfg["version"] or doc.get("questPack") != cfg["questPack"]:
+        sys.exit("tools/signatures.json is for %s with quest pack %s, but release.json says %s with %s: "
+                 "run release.cmd again" % (doc.get("version"), doc.get("questPack"), cfg["version"], cfg["questPack"]))
+    pack_sig, stamp_sig = bytes.fromhex(doc["packSig"]), bytes.fromhex(doc["stampSig"])
+    if not ed25519.verify(public, data, pack_sig):
+        sys.exit("The quest pack's signature doesn't check out: quests/ changed since it was signed. "
+                 "Run release.cmd again.")
+    if not ed25519.verify(public, stamp_body(cfg), stamp_sig):
+        sys.exit("The release stamp's signature doesn't check out against release.json. Run release.cmd again.")
+    return pack_sig, stamp_sig
 
 
 # Lua output -----------------------------------------------------------------------------
@@ -358,10 +393,13 @@ def main(argv):
     if argv and argv[0] == "probe":
         build_probe()
         return 0
-    if not argv or argv[0] not in ("dev", "test", "beta", "release"):
+    if not argv or argv[0] not in ("dev", "test", "beta", "release", "publish"):
         print(__doc__)
         return 2
     mode = argv[0]
+    released = mode in ("release", "publish")
+    if released and argv[1:]:
+        sys.exit("A release takes everything from tools/release.json, so GitHub builds the same: set it there.")
     with open(RELEASE, encoding="utf-8") as f:
         cfg = json.load(f)
     # a test build's own dates: tools/test.json while a test runs, else go-live today
@@ -390,16 +428,24 @@ def main(argv):
         if datetime.date.fromisoformat(cfg["wakeUp"]) <= go_live:
             sys.exit("the wake-up day must come after go-live")
 
-    test = mode != "release"
+    test = not released
     tools = mode in ("dev", "test")
     # a release needs its changes written down first; test and beta builds show them if so
-    changes = changes_of(cfg["version"], required=mode == "release") if mode != "dev" else None
-    seed, public = load_key("test.key" if test else "release.key", create=test)
+    changes = changes_of(cfg["version"], required=released) if mode != "dev" else None
 
     num = cfg["questPack"]
     data = build_pack(num)
-    pack_sig = ed25519.sign(seed, data)
-    stamp_sig = ed25519.sign(seed, stamp_body(cfg))
+    if mode == "publish":
+        # no key here: the signatures made with it, checked against the public key
+        public = bytes.fromhex(cfg["publicKey"])
+        pack_sig, stamp_sig = load_signatures(cfg, public, data)
+    else:
+        seed, public = load_key("test.key" if test else "release.key", create=test)
+        if mode == "release" and public.hex() != cfg.get("publicKey"):
+            sys.exit("keys/release.key isn't the key tools/release.json names (publicKey %s), the one every "
+                     "installed copy trusts. Use that key, or change publicKey on purpose." % cfg.get("publicKey"))
+        pack_sig = ed25519.sign(seed, data)
+        stamp_sig = ed25519.sign(seed, stamp_body(cfg))
     assert ed25519.verify(public, data, pack_sig)
 
     if mode == "dev":
@@ -411,9 +457,11 @@ def main(argv):
     copy_dist(cfg, test, tools, public, stamp_sig, num, data, pack_sig, changes)
     if mode == "beta":
         zip_dist("PintoTGD-beta.zip")
-    elif mode == "release":
+    elif released:
         zip_dist("PintoTGD-%s.zip" % cfg["version"])
-        update_readme(cfg["version"], changes)
+        if mode == "release":
+            update_readme(cfg["version"], changes)
+            write_signatures(cfg, pack_sig, stamp_sig)
     return 0
 
 
