@@ -777,6 +777,12 @@ function packs.encode(p, w)
   if p.stamp then writeStamp(w, p.stamp) end
 end
 
+-- A stamp on its own, as a STAMP message carries it (Release.Offer): the signed body, then
+-- the signature. Every version reads it with Pieces.readStamp, so it never changes.
+function Pieces.stampBytes(st)
+  return Pieces.stampBody(st) .. st.sig
+end
+
 function Pieces.readStamp(r)
   if r:bytes(10) ~= "PintoStamp" then fail("stamp") end
   local st = { version = r:str(16), dataVersion = r:u8(), protocolVersion = r:u8(),

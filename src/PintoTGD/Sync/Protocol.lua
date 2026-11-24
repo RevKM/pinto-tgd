@@ -140,6 +140,8 @@ end
 
 -- Hellos ---------------------------------------------------------------------------
 
+-- Every version reads hellos (Comm.lua), so this never changes; a later version may only
+-- add to its end.
 local function helloPayload()
   local w = Bytes.writer()
   w:u32(ns.account)
@@ -164,7 +166,11 @@ Comm.handlers[T.HELLO] = function(r, sender, channel)
     fp = r:u32(), count = r:u16(), at = GetTime() }
   Protocol.peers[sender] = peer
   Events.Fire("PINTO_PEER", sender, peer)
-  if not sameData(peer) then return end
+  -- on another version, no sync: just the newest release, if they're behind
+  if not sameData(peer) then
+    ns.Release.Offer(sender, peer)
+    return
+  end
   local mine = Store.wholeFingerprint()
   if peer.fp == mine or Protocol.state == "alone" then
     if not session then setState("synced") end

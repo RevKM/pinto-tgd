@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.Build = {
-  version = "0.1.0",
+  version = "0.1.1",
   dataVersion = 1,
   protocolVersion = 1,
   formulaVersion = 1,

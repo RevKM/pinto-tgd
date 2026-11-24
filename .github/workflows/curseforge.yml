@@ -1,0 +1,56 @@
+# Sends each Pinto release to CurseForge.
+#
+# Publishing a GitHub release runs this, with the zip that tools/build.py release made
+# attached. tools/curseforge.py checks the zip is a signed release build of the release's
+# version, then uploads it with that version's changes from CHANGELOG.md. The zip is built
+# and signed on the maintainer's PC, so the signing key never comes here.
+#
+# GitHub runs it from the tagged commit, so this file must be committed before the tag.
+# To send a release that's already out, run it by hand (Actions > CurseForge > Run
+# workflow) with the release's tag.
+#
+# Needs, under Settings > Secrets and variables > Actions:
+#   secret CF_API_TOKEN          a CurseForge API token
+#   variable CF_PROJECT_ID       the CurseForge project's id
+#   variable CF_GAME_VERSION_ID  optional: the game version's id, if looking it up fails
+name: CurseForge
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to upload, like v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    # pre-releases stay on GitHub
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Get the release's zip
+        run: |
+          zip="PintoTGD-${TAG#v}.zip"
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$zip" --dir release; then
+            echo "::error::Release $TAG needs $zip attached, made by tools/build.py release."
+            exit 1
+          fi
+
+      - name: Upload it to CurseForge, with its changes
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
+          CF_GAME_VERSION_ID: ${{ vars.CF_GAME_VERSION_ID }}
+        run: python3 tools/curseforge.py "release/PintoTGD-${TAG#v}.zip" "$TAG" CHANGELOG.md

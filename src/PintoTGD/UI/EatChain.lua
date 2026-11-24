@@ -506,3 +506,22 @@ end
 
 function Eat.Flyer() return flyer end
 function Eat.Phase() return cur and cur.phase end
+
+-- Haunches from this account's finished quests that haven't reached Pinto yet: waiting to
+-- be eaten, or on their way to his pile or his mouth. The guild's pile in the quest panel
+-- leaves them out until they land, so the player sees it grow by their quests. Previews
+-- never count: they were never part of the guild's pile.
+function Eat.Pending()
+  local n = 0
+  for _, e in ipairs(ns.Quests.Uneaten()) do
+    if not e.preview then
+      n = n + total(e)
+      if cur and cur.entry.key == e.key and cur.flights then
+        for _, f in ipairs(cur.flights) do
+          if f.phase == "done" then n = n - 1 end
+        end
+      end
+    end
+  end
+  return math.max(0, n)
+end

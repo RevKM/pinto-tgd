@@ -189,4 +189,46 @@ H.test("data arrives in any order and still gives the same result", function()
   noErrors(world)
 end)
 
+H.test("a copy on a newer protocol can't sync with older ones, but its release still reaches them all", function()
+  local world = newWorld(41, 0)
+  local thorn = world:client(full("Thorn"))
+  thorn:login()
+  -- Thorn runs a later Pinto, 0.9.0, whose protocol version is 2: older copies can't read
+  -- its messages, except the hellos and stamps every version reads
+  local tns = thorn.ns
+  tns.Build.version, tns.Build.protocolVersion = "0.9.0", 2
+  tns.Store.SetStamp({ version = "0.9.0", dataVersion = tns.Build.dataVersion, protocolVersion = 2,
+    pack = tns.Build.questPack, important = false, sig = string.rep("\7", 64) }, "local")
+  -- the stamp isn't really signed here: Kiri and Bram take every signature as good, Ash
+  -- checks them for real. Kiri and Bram have the UI, for the update popup.
+  local function trusting(c) c.ns.Crypto.verifier = function() return function() return true end end end
+  local kiri, ash = world:client(full("Kiri"), { ui = true }), world:client(full("Ash"))
+  kiri:login()
+  trusting(kiri)
+  ash:login()
+  world:run(40)
+  local status, st = kiri.ns.Release.Status()
+  H.eq(status, "needed", "Kiri hears of 0.9.0, though it can't sync with it")
+  H.eq(st and st.version, "0.9.0")
+  local peers = {}
+  for _, name in ipairs(kiri.ns.Protocol.OnlinePeers()) do peers[name] = true end
+  H.ok(not peers[thorn.name], "it doesn't sync with Thorn")
+  H.ok(peers[ash.name], "only with copies on its own version")
+  H.eq(ash.ns.Release.Status(), nil, "a stamp that isn't signed is refused")
+  -- Bram's copy is too old to read a stamp on its own, like 0.1.0: it hears of it from
+  -- Kiri's copy, in their sync. A new copy's first sync takes a few minutes: the quest pack
+  -- alone is dozens of messages, at one a second.
+  local bram = world:client(full("Bram"), { ui = true })
+  bram:login()
+  trusting(bram)
+  bram.ns.Comm.handlers[bram.ns.Comm.T.STAMP] = nil
+  for _ = 1, 60 do
+    if bram.ns.Release.Status() then break end
+    world:run(5)
+  end
+  H.eq(bram.ns.Release.Status(), "needed", "Bram hears of it through Kiri")
+  H.eq(ash.ns.Release.Status(), nil, "still refused")
+  noErrors(world)
+end)
+
 H.finish()

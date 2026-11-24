@@ -227,11 +227,35 @@ end
 
 -- The guild's pile and hoard ---------------------------------------------------------------
 -- While Pinto sleeps: every haunch the guild's finished quests have earned since go-live,
--- as a pile of drumsticks and a number. Once he's awake: how the guild is doing for gear
--- and for gold, as a word and five coins each, never as numbers.
+-- as a pile of drumsticks and a number. The player's own haunches join it as they land on
+-- Pinto's pile, so it grows while the player watches: the new drumsticks drop in and the
+-- number flashes gold. Once he's awake: how the guild is doing for gear and for gold, as a
+-- word and five coins each, never as numbers.
 
 local PILE_ROWS = { 7, 6, 5, 4, 3, 2, 1 }   -- up to 28 drumsticks, bottom row first
 local PILE_MAX = 28
+local GROW = 0.45     -- seconds for a new drumstick to drop in and the number to flash
+local GROW_DROP = 10  -- how far above its place a new drumstick starts
+
+-- One frame of the pile growing.
+local function stepGrow(self, elapsed)
+  self.growT = self.growT + elapsed
+  local e = UI.Smooth(math.min(1, self.growT / GROW))
+  for i = self.growFrom, #self.icons do
+    local icon = self.icons[i]
+    if icon.home then
+      icon:SetAlpha(e)
+      icon:ClearAllPoints()
+      icon:SetPoint("CENTER", self, "BOTTOMLEFT", icon.home[1], icon.home[2] + GROW_DROP * (1 - e))
+    end
+  end
+  -- gold, back to white
+  self.count:SetTextColor(1, 0.82 + 0.18 * e, e)
+  if self.growT >= GROW then
+    self.growT = nil
+    self:SetScript("OnUpdate", nil)
+  end
+end
 
 local function pip(i)
   local p = hoard.pips[i]
@@ -291,13 +315,23 @@ local function showPile(total)
         icon = UI.Haunch(hoard, 18)
         hoard.icons[i] = icon
       end
+      icon.home = { 12 + (7 - cap) * 6 + (k - 1) * 12 + (cap - inRow) * 6, 11 + (row - 1) * 8 }
       icon:ClearAllPoints()
-      icon:SetPoint("CENTER", hoard, "BOTTOMLEFT", 12 + (7 - cap) * 6 + (k - 1) * 12 + (cap - inRow) * 6,
-        11 + (row - 1) * 8)
+      icon:SetPoint("CENTER", hoard, "BOTTOMLEFT", icon.home[1], icon.home[2])
       icon:Show()
     end
   end
   for j = i + 1, #hoard.icons do hoard.icons[j]:Hide() end
+  -- grown since it last showed: the new drumsticks drop in and the number flashes
+  local before = hoard.lastTotal
+  hoard.lastTotal = total
+  if before and total > before then
+    local from = math.min(before, PILE_MAX) + 1
+    if hoard.growT then from = math.min(from, hoard.growFrom) end
+    for j = from, i do hoard.icons[j]:SetAlpha(0) end
+    hoard.growFrom, hoard.growT = from, 0
+    hoard:SetScript("OnUpdate", stepGrow)
+  end
   hoard.count:SetText(total == 1 and "1 haunch" or string.format("%d haunches", total))
   hoard.count:Show()
   hoard.note:SetText(total == 0 and "Finish a Pinto quest to start the pile."
@@ -345,7 +379,8 @@ function QuestList.UpdateHoard()
   hoard:SetShown(show and true or false)
   if not show then return end
   if state == "calibration" then
-    showPile(Quests.GuildHaunches())
+    -- the player's own haunches still on their way aren't on the guild's pile yet
+    showPile(math.max(0, Quests.GuildHaunches() - UI.Eat.Pending()))
   else
     showWealth()
   end

@@ -92,16 +92,47 @@ H.test("during the calibration: windows, a finished quest lands on the meat pile
   local row = QL.Rows()[1]
   H.ok(row and row.reward:GetText():find("^Rewards |T"), "the reward line: " .. tostring(row and row.reward:GetText()))
   H.ok(row.reward:GetText():find(" haunches$"), "the reward line ends with haunches")
-  world:run(20)
+  -- the guild's pile leaves the player's haunches out until they land on Pinto's pile, then
+  -- grows by each one as it lands: the new drumstick drops in and the number flashes gold
+  QL.UpdateHoard()
+  H.eq(hoard.count:GetText(), "0 haunches", "not on the guild's pile before they land")
+  local seen, flashed, dropped = { hoard.count:GetText() }, false, false
+  for _ = 1, 200 do
+    world:run(0.1)
+    local text = hoard.count:GetText()
+    if text ~= seen[#seen] then seen[#seen + 1] = text end
+    if hoard.count.vc[3] < 0.5 then flashed = true end
+    local first = hoard.icons[1]
+    if first and first.shown and first.alpha < 1 then dropped = true end
+  end
+  H.deepEq(seen, { "0 haunches", "1 haunch", "2 haunches" }, "one haunch at a time")
+  H.ok(flashed, "the number flashes gold")
+  H.ok(dropped, "the new drumstick drops in")
+  H.eq(hoard.icons[1].alpha, 1)
+  H.eq(hoard.count.vc[3], 1, "and the number is white again")
   H.eq(#ns.Quests.Uneaten(), 0, "the quest wasn't eaten")
   H.eq(ns.UI.Win.Pile().count, 2, "two haunches should be on the pile")
   H.eq(ns.Quests.GuildHaunches(), 2)
   QL.Refresh()
   H.eq(hoard.count:GetText(), "2 haunches")
+  -- "Your contribution so far": under the player's pile, as far under its middle as it can
+  -- be while ending inside Pinto's side, clear of the quest list
+  local label = win.pileLabel
+  H.ok(label and label.shown, "the label shows with the pile")
+  H.eq(label:GetText(), "Your contribution so far")
+  local x, y = ns.UI.Win.Scene():SceneToFrame(654, 408)
+  local top = label.points.TOP
+  H.ok(top and top.rel == win.holder and top.relPoint == "TOPLEFT", "hangs from its top, under the pile")
+  H.eq(top.y, y)
+  H.ok(top.x <= x, "never right of the pile's middle")
+  H.ok(top.x + label:GetStringWidth() / 2 <= 680 - 8, "it ends inside Pinto's side")
   ns.UI.Open("small")
   world:run(2)
+  local small = ns.UI.SmallWindow()
+  H.ok(not (small.pileLabel and small.pileLabel.shown), "the small window has no room for the label")
   ns.UI.Toggle("full")
   world:run(2)
+  H.ok(win.pileLabel.shown, "back in the full window")
   ns.Build.testTools = true   -- the debug panel, whatever this build has
   ns.UI.ToggleDebugPanel()
   world:run(2)
@@ -397,7 +428,7 @@ H.test("starting up: no window opens by itself unless the small one is asked for
   H.ok(not (MB.Notice() and MB.Notice().shown), "no notice before the sync")
   H.ok(runUntil(world, 90, function() return MB.Notice() and MB.Notice().shown end), "the start notice should show")
   local note = MB.Notice()
-  H.eq(note.text:GetText(), "There are new Pinto quests for you!", "the first login of the week")
+  H.eq(note.text:GetText(), "Pinto lives here! Click to view.", "the account's first run: where Pinto lives, instead")
   H.eq(note.points.LEFT.rel, button)
   world:run(2)
   H.eq(note.alpha, 1)
@@ -421,7 +452,7 @@ H.test("starting up: no window opens by itself unless the small one is asked for
   H.eq(small.cover.alpha, 1)
   MB = ns.UI.MiniButton
   H.ok(runUntil(world, 90, function() return MB.Notice() and MB.Notice().shown end), "the start notice should show again")
-  H.eq(MB.Notice().text:GetText(), "Pinto is snoozing on the hoard", "told about the quests already this week")
+  H.eq(MB.Notice().text:GetText(), "There are new Pinto quests for you!", "the quests, which the welcome stood in for")
   world:run(3)
   H.ok(small.cover.alpha < 0.01, "the cover fades with the silhouette")
   -- unticked, nothing opens, even with the full window open at logout
@@ -435,6 +466,136 @@ H.test("starting up: no window opens by itself unless the small one is asked for
   kiri:login()
   world:run(2)
   H.eq(kiri.ns.UI.Active(), nil)
+  MB = kiri.ns.UI.MiniButton
+  H.ok(runUntil(world, 90, function() return MB.Notice() and MB.Notice().shown end), "and again")
+  H.eq(MB.Notice().text:GetText(), "Pinto is snoozing on the hoard", "told about the quests already this week")
+  H.ok(errorsOf(kiri))
+end)
+
+H.test("notices take turns: each fades out before the next comes in, and clicking one opens Pinto", function()
+  local world, kiri = setup(1796349600)
+  local ns = kiri.ns
+  local MB = ns.UI.MiniButton
+  world:run(20)
+  H.ok(not (MB.Notice() and MB.Notice().shown), "the start notice has come and gone")
+  MB.ShowNotice("First")
+  MB.ShowNotice("Second")
+  MB.ShowNotice("First")    -- showing already
+  MB.ShowNotice("Untrue", { still = function() return false end })
+  MB.ShowNotice("Second")   -- waiting already
+  local note = MB.Notice()
+  H.eq(note.text:GetText(), "First")
+  H.deepEq(MB.Waiting(), { "Second", "Untrue" }, "the others wait their turn, each once")
+  world:run(9)
+  H.ok(note.shown and note.alpha < 1, "the first fades out")
+  H.eq(note.text:GetText(), "First", "the second doesn't cut it short")
+  world:run(0.3)
+  H.ok(not note.shown, "gone")
+  H.deepEq(MB.Waiting(), { "Second", "Untrue" }, "a moment's pause before the next")
+  world:run(0.4)
+  H.ok(note.shown, "the next comes in")
+  H.eq(note.text:GetText(), "Second")
+  H.ok(note.alpha < 1 and note.phase == "in", "fading in")
+  -- clicking a note opens Pinto and sends the note on its way
+  H.eq(ns.UI.Active(), nil)
+  note.scripts.OnMouseUp(note, "LeftButton")
+  H.eq(ns.UI.Active(), "full", "the window size used last")
+  world:run(1.5)
+  H.ok(not note.shown, "the clicked note goes")
+  world:run(10)
+  H.ok(not note.shown, "one that's no longer true by its turn is skipped")
+  H.deepEq(MB.Waiting(), {})
+  H.ok(errorsOf(kiri))
+end)
+
+H.test("a newer Pinto: a notice once per login, after another guildie's addon says hello", function()
+  local world, kiri, clients = setup(1796349600)
+  local ns = kiri.ns
+  local MB = ns.UI.MiniButton
+  world:run(20)
+  local function showing(text)
+    local n = MB.Notice()
+    return n ~= nil and n.shown and n.text:GetText() == text
+  end
+  -- a guildie logs in again: their addon says hello 6 to 10 seconds later
+  local function hello(i)
+    clients[i]:logout()
+    clients[i]:login()
+  end
+  hello(2)
+  world:run(15)
+  H.ok(not (MB.Notice() and MB.Notice().shown), "no notice while this is the newest")
+  -- a signed stamp for 0.2.0 came with the sync (stood in for here)
+  ns.Release.Status = function() return "available", { version = "0.2.0" } end
+  hello(3)
+  H.ok(runUntil(world, 15, function() return showing("Pinto 0.2.0 is out! Update when you can.") end),
+    "the notice, once another addon says hello")
+  -- clicking it shows the update popup, with the link to copy
+  local note = MB.Notice()
+  note.scripts.OnMouseUp(note, "LeftButton")
+  local popup = ns.UI.Popups.Frame()
+  H.ok(popup and popup.shown, "the update popup")
+  H.eq(popup.text:GetText(), "Pinto 0.2.0 is out! Update when you get a chance.")
+  H.eq(popup.box:GetText(), ns.Build.releaseUrl)
+  popup:Hide()
+  world:run(2)
+  H.ok(not note.shown, "the note goes once clicked")
+  hello(4)
+  world:run(15)
+  H.ok(not (MB.Notice() and MB.Notice().shown), "once per login")
+  -- the next login, again with the first hello; an update that's needed says so
+  kiri:logout()
+  kiri:login()
+  ns = kiri.ns
+  MB = ns.UI.MiniButton
+  ns.Release.Status = function() return "needed", { version = "0.3.0" } end
+  hello(5)
+  H.ok(runUntil(world, 60, function() return showing("Pinto needs an update to stay in sync!") end),
+    "with the start notice, each in turn")
+  H.ok(errorsOf(kiri))
+end)
+
+H.test("finished quests waiting an hour: a reminder to feed Pinto, never in or just after combat", function()
+  local world, kiri = setup(1796349600)
+  local ns = kiri.ns
+  local MB, Notices, Quests = ns.UI.MiniButton, ns.UI.Notices, ns.Quests
+  world:run(20)
+  local function reminding()
+    local n = MB.Notice()
+    return n ~= nil and n.shown and n.text:GetText() == Notices.FEED_TEXT
+  end
+  H.eq(Notices.FEED_TEXT, "You have completed quests! Open to feed Pinto!")
+  local week = finishDungeonQuest(kiri)
+  H.eq(#Quests.Uneaten(), 1)
+  world:run(30)
+  H.ok(not reminding(), "not within the hour")
+  -- an hour since it was finished, in combat: not yet
+  for _, rec in pairs(Quests.Piece(week).done) do rec.time = rec.time - 3600 end
+  kiri.combat = true
+  world:run(30)
+  H.ok(not reminding(), "not in combat")
+  -- out of combat: after 2 minutes
+  kiri.combat = false
+  kiri:fire("PLAYER_REGEN_ENABLED")
+  world:run(100)
+  H.ok(not reminding(), "not within 2 minutes of combat")
+  H.ok(runUntil(world, 40, reminding), "the reminder")
+  -- once for those quests this login
+  world:run(30)
+  H.ok(not reminding(), "once")
+  -- the next login, once more; clicking it opens the full window, where Pinto eats them
+  kiri:logout()
+  kiri:login()
+  ns = kiri.ns
+  MB, Notices, Quests = ns.UI.MiniButton, ns.UI.Notices, ns.Quests
+  H.ok(runUntil(world, 90, reminding), "again the next login, after the start notice")
+  local note = MB.Notice()
+  note.scripts.OnMouseUp(note, "LeftButton")
+  H.eq(ns.UI.Active(), "full")
+  world:run(20)
+  H.eq(#Quests.Uneaten(), 0, "eaten")
+  world:run(60)
+  H.ok(not reminding(), "nothing left to remind of")
   H.ok(errorsOf(kiri))
 end)
 

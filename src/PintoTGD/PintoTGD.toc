@@ -41,6 +41,7 @@ UI\Windows.lua
 UI\QuestList.lua
 UI\EatChain.lua
 UI\Popups.lua
+UI\Notices.lua
 UI\OfficerTab.lua
 UI\Debug.lua
 UI\UI.lua

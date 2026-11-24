@@ -195,9 +195,12 @@ function Win.PileCount()
   return Win.Pile().count
 end
 
+local updatePileLabel
+
 -- Haunches that land on the pile: while Pinto sleeps, or set aside while he's busy eating.
 -- A pile from his sleep is eaten in one stream when he wakes; one set aside while he was
--- awake (pile.awake) a haunch at a time.
+-- awake (pile.awake) a haunch at a time. Each one that lands also lands on the guild's pile
+-- in the quest panel.
 function Win.AddToPile(n)
   if testLook then
     testLook.pile = testLook.pile + n
@@ -207,6 +210,10 @@ function Win.AddToPile(n)
     if scene and scene:IsAwake() then pile.awake = true end
   end
   if scene then scene:SetMeatPile(Win.PileCount()) end
+  if active == "full" and full then
+    updatePileLabel(full)
+    UI.QuestList.UpdateHoard()
+  end
 end
 
 -- The haunches left on the pile, as Pinto eats it.
@@ -220,10 +227,19 @@ function Win.PileLeft(left)
   end
 end
 
--- "Your contribution so far", above the meat pile while he sleeps beside one.
-local function updatePileLabel(win)
+-- "Your contribution so far", under the meat pile while he sleeps beside one, in the full
+-- window only: the small one has no room for it. It's centred under the pile as far as it
+-- can be while staying on Pinto's side, clear of the quest list.
+local PILE_LABEL_X, PILE_LABEL_Y = 654, 408   -- under the pile's middle, in scene units
+local PILE_LABEL_MARGIN = 8                    -- from the right edge of Pinto's side
+
+updatePileLabel = function(win)
+  if win ~= full then
+    if win.pileLabel then win.pileLabel:Hide() end
+    return
+  end
   if not win.pileLabel then
-    win.pileLabel = UI.Text(win, win == small and "GameFontHighlightSmall" or "GameFontNormalSmall")
+    win.pileLabel = UI.Text(win, "GameFontNormalSmall")
     win.pileLabel:SetJustifyH("CENTER")
     win.pileLabel:SetText("Your contribution so far")
   end
@@ -232,9 +248,10 @@ local function updatePileLabel(win)
     win.pileLabel:Hide()
     return
   end
-  local x, y = scene:SceneToFrame(652, 352 - math.min(count, 15) * 1.5)
+  local x, y = scene:SceneToFrame(PILE_LABEL_X, PILE_LABEL_Y)
+  local most = win.holder:GetWidth() - win.pileLabel:GetStringWidth() / 2 - PILE_LABEL_MARGIN
   win.pileLabel:ClearAllPoints()
-  win.pileLabel:SetPoint("BOTTOM", win.holder, "TOPLEFT", math.min(x, win.holder:GetWidth() - 50), y)
+  win.pileLabel:SetPoint("TOP", win.holder, "TOPLEFT", math.min(x, most), y)
   win.pileLabel:Show()
 end
 
@@ -460,20 +477,27 @@ function Win.Testing() return testLook ~= nil end
 function Win.TestLook() return testLook end
 
 -- The start notice ---------------------------------------------------------------------
--- A few words once the login sync is done: new quests on the day they come out, and the
--- first time a character logs in that week; otherwise a change of shape since the player
--- last saw Pinto, or his mood. Always the guild's state, never a test look.
+-- A few words once the login sync is done. On the account's very first run, where Pinto
+-- lives, instead of anything else. Otherwise new quests on the day they come out, and the
+-- first time a character logs in that week; else a change of shape since the player last
+-- saw Pinto, or his mood. Always the guild's state, never a test look.
 
 local GIRTH = 0.02   -- the change in weight that counts as gaining or losing girth
+Win.WELCOME = "Pinto lives here! Click to view."
 
 function Win.NoticeText()
   if ns.disabled then return nil end
+  local ui = UI.Settings()
+  -- set when the saved data was first made (Main.lua), until the welcome has been shown
+  if ui.welcome then
+    ui.welcome = nil
+    return Win.WELCOME
+  end
   if not Time.isLive() then return Health.ArrivesText() end
   local state = Win.RealState()
   if state == "off" or state == "syncing" then return nil end
   local me = ns.me
   local week = Quests.Week()
-  local ui = UI.Settings()
   ui.questNotice = ui.questNotice or {}
   local mark = string.format("%s:%d", ns.Store.slotKey(), week)
   if me and #Quests.Mine() > 0 and (Time.day() == Time.weekStartDay(week) or ui.questNotice[me] ~= mark) then
@@ -603,6 +627,7 @@ function UI.Open(kind)
     active = "full"
     attachScene(full, 40)
     full:Show()
+    if UI.Notices then UI.Notices.FullOpened() end
     UI.QuestList.Refresh()
   else
     small = small or buildSmall()

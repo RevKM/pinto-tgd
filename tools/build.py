@@ -26,19 +26,23 @@
       tools/release.json. Make the release key once with:
           python tools/ed25519.py keygen keys/release.key
       and keep a backup: addons only trust what this key has signed.
+      CHANGELOG.md must have the version's changes, under "## <version>": the build puts
+      them in the README's "What's new" block and on the release page.
 
 dist/PintoTGD gets the .toc, every file the .toc lists and Media/. dist/README.md is the
-text for the release page: what Pinto is and how to install it.
+text for the release page: what's new, how to install it and what Pinto is.
 """
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+import changelog  # noqa: E402
 import ed25519  # noqa: E402
 
 SRC = os.path.join(ROOT, "src", "PintoTGD")
@@ -47,6 +51,8 @@ KEYS = os.path.join(ROOT, "keys")
 QUESTS = os.path.join(ROOT, "quests")
 RELEASE = os.path.join(ROOT, "tools", "release.json")
 TEST = os.path.join(ROOT, "tools", "test.json")
+CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
+README_MAIN = os.path.join(ROOT, "README.md")
 
 PACK_FORMAT = 1
 
@@ -227,13 +233,7 @@ def toc_files():
     return files
 
 
-README = """# Pinto, the Girthy Dragon
-
-A WoW: Forever addon for The Girthy Dragons. It shows the guild's social health as a dragon
-on a gold hoard: Pinto gets fatter as guildies play together, and each character gets 4 meta
-quests a week that feed him.
-
-## Install
+README = """{whats_new}## Install
 
 1. Download `PintoTGD-{version}.zip` below.
 2. Unzip it into `World of Warcraft/_forever_/Interface/AddOns/`, so that you get
@@ -242,18 +242,66 @@ quests a week that feed him.
 
 There's nothing to set up. Update by replacing the folder; your saved data updates itself.
 
-## Good to know
+## Pinto, the Girthy Dragon
+
+A WoW: Forever addon for The Girthy Dragons. It shows the guild's social health as a dragon
+on a gold hoard: Pinto gets fatter as guildies play together, and each character gets 4 meta
+quests a week that feed him.
 
 - Everything stays inside the game: the guild's addons share data among themselves.
 - Pinto only shows guild-level health. There are no leaderboards or personal scores.
 - A second WoW license: type `/pinto link` on one and `/pinto link CODE` on the other.
 - The code is readable as-is. Saved data is stored compactly encoded.
 
-Version {version}.
+Version {version}.{all_changes}
 """
 
 
-def copy_dist(cfg, test, tools, public, stamp_sig, pack_num, pack_data, pack_sig):
+# The changelog ------------------------------------------------------------------------
+
+def changes_of(version, required):
+    """The version's changes from CHANGELOG.md; a release can't be built without them."""
+    with open(CHANGELOG, encoding="utf-8") as f:
+        changes = changelog.section(f.read(), version)
+    if not changes and required:
+        sys.exit("CHANGELOG.md has no changes for %s yet: add them under \"## %s\", newest first."
+                 % (version, version))
+    return changes
+
+
+def whats_new(version, changes):
+    return ("## What's new in %s\n\n%s\n\nEvery release's changes are in [CHANGELOG.md](CHANGELOG.md).\n"
+            % (version, changes))
+
+
+# The README's block between these markers is the newest release's changes.
+WHATS_NEW_BLOCK = re.compile(r"(<!-- whats-new[^>]*-->\n).*?(<!-- /whats-new -->)", re.S)
+
+
+def update_readme(version, changes):
+    with open(README_MAIN, encoding="utf-8") as f:
+        text = f.read()
+    new, n = WHATS_NEW_BLOCK.subn(lambda m: m.group(1) + whats_new(version, changes) + m.group(2), text)
+    if n != 1:
+        sys.exit("README.md needs one <!-- whats-new --> ... <!-- /whats-new --> block for the newest changes")
+    if new != text:
+        with open(README_MAIN, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new)
+    print("README.md: what's new in", version)
+
+
+def release_text(cfg, changes):
+    """dist/README.md: the text for the release page."""
+    new = ""
+    if changes:
+        new = "## What's new in %s\n\n%s\n\n" % (cfg["version"], changes)
+    url = cfg.get("releaseUrl", "")
+    repo = url.split("/releases")[0] if "/releases" in url else None
+    all_changes = (" Every release's changes: [CHANGELOG.md](%s/blob/main/CHANGELOG.md)." % repo) if repo else ""
+    return README.format(whats_new=new, version=cfg["version"], all_changes=all_changes)
+
+
+def copy_dist(cfg, test, tools, public, stamp_sig, pack_num, pack_data, pack_sig, changes=None):
     out = os.path.join(DIST, "PintoTGD")
     if os.path.exists(out):
         shutil.rmtree(out)
@@ -273,7 +321,7 @@ def copy_dist(cfg, test, tools, public, stamp_sig, pack_num, pack_data, pack_sig
     if os.path.isdir(media):
         shutil.copytree(media, os.path.join(out, "Media"))
     with open(os.path.join(DIST, "README.md"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(README.replace("{version}", cfg["version"]))
+        f.write(release_text(cfg, changes))
     # stamp the version into the .toc copy
     toc = os.path.join(out, "PintoTGD.toc")
     with open(toc, encoding="utf-8") as f:
@@ -344,6 +392,8 @@ def main(argv):
 
     test = mode != "release"
     tools = mode in ("dev", "test")
+    # a release needs its changes written down first; test and beta builds show them if so
+    changes = changes_of(cfg["version"], required=mode == "release") if mode != "dev" else None
     seed, public = load_key("test.key" if test else "release.key", create=test)
 
     num = cfg["questPack"]
@@ -358,11 +408,12 @@ def main(argv):
         print("wrote the dev quest pack (%d bytes, %d templates) and Build.lua into src/"
               % (len(data), len(load_templates()[0])))
         return 0
-    copy_dist(cfg, test, tools, public, stamp_sig, num, data, pack_sig)
+    copy_dist(cfg, test, tools, public, stamp_sig, num, data, pack_sig, changes)
     if mode == "beta":
         zip_dist("PintoTGD-beta.zip")
     elif mode == "release":
         zip_dist("PintoTGD-%s.zip" % cfg["version"])
+        update_readme(cfg["version"], changes)
     return 0
 
 

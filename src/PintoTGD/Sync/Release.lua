@@ -94,6 +94,32 @@ function Release.Incoming(piece, sender)
   end
 end
 
+-- Copies on another data or protocol version can't sync with this one, so the sync can't
+-- bring them the newest stamp. It goes to them on its own instead, in a STAMP message,
+-- which every version reads (Comm.lua): to a copy older than the newest release known
+-- here, once per copy and release, after its hello. Once one of them has it, it reaches
+-- copies on its own version in their sync, even ones too old to read a STAMP message.
+local offered = {}   -- name -> the version last sent to them
+
+function Release.Offer(name, peer)
+  local k = Store.get("k")
+  local st = k and k.stamp
+  if not st or offered[name] == st.version then return end
+  if Pieces.versionNumber(st.version) <= Pieces.versionNumber(peer.version) then return end
+  offered[name] = st.version
+  ns.Comm.Send(ns.Comm.T.STAMP, Pieces.stampBytes(st), "WHISPER", name, 2)
+end
+
+-- A stamp on its own, from a copy on another version: checked like any other before it's
+-- merged.
+ns.Comm.handlers[ns.Comm.T.STAMP] = function(r, sender)
+  local st = Pieces.readStamp(r)
+  if not frame then return end
+  local mine = Store.get("k")
+  if mine and mine.stamp and mine.stamp.sig == st.sig then return end
+  enqueue({ kind = "stamp", obj = st, from = sender })
+end
+
 -- The pack and stamp that came with this build.
 function Release.LoadEmbedded()
   local pd = ns.QuestPackData

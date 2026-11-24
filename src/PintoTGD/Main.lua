@@ -72,7 +72,9 @@ end
 
 Events.On("ADDON_LOADED", function(name)
   if name ~= ADDON then return end
-  PintoTGD_DB = PintoTGD_DB or {}
+  -- no saved data yet: Pinto's first run on this account, so the start notice says where
+  -- he lives (UI.Win.NoticeText)
+  if PintoTGD_DB == nil then PintoTGD_DB = { ui = { welcome = true } } end
 end)
 
 Events.On("PLAYER_LOGIN", function()

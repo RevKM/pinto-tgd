@@ -11,6 +11,7 @@ function UI.Init()
   UI.Win.Init()
   if not ns.disabled then
     UI.Popups.Init()
+    UI.Notices.Init()
     local pending = false
     local function refresh()
       if pending then return end

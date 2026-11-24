@@ -4,6 +4,12 @@
 -- zero byte, and at most 255 bytes. Longer messages travel as PART messages:
 -- [protocol][PART][message id u16][index u8][count u8][chunk].
 -- Blizzard allows a burst of 10 addon messages, then 1 per second per prefix.
+--
+-- A copy only reads messages under its own protocol version, with two exceptions every
+-- version reads: hellos and release stamps. They always go out under the first protocol
+-- version's number, so copies on different versions, which can't sync, still hear each
+-- other's hello and the newest release (Release.Offer). Frozen: their payloads never
+-- change (a later version may only add to a hello's end), and each fits in one message.
 local ADDON, ns = ...
 
 local Comm = {}
@@ -12,8 +18,13 @@ ns.Comm = Comm
 local Util, Bytes, Compat = ns.Util, ns.Bytes, ns.Compat
 
 Comm.PREFIX = ns.Build.test and "PintoTGDt" or "PintoTGD"
-Comm.T = { PART = 1, HELLO = 2, FACTS = 3, LIST_REQ = 4, LIST = 5, PIECES_REQ = 6, PIECES = 7, PING = 8 }
+Comm.T = { PART = 1, HELLO = 2, FACTS = 3, LIST_REQ = 4, LIST = 5, PIECES_REQ = 6, PIECES = 7, PING = 8,
+  STAMP = 9 }
 local T = Comm.T
+
+-- The messages every version reads, and the protocol version they always go out under.
+Comm.FROZEN_PROTOCOL = 1
+local FROZEN = { [T.HELLO] = true, [T.STAMP] = true }
 
 local MAX = 255
 local PART_HEADER_MAX = 12 -- the 6-byte part header, escaped, at worst
@@ -66,11 +77,15 @@ end
 
 -- Sends payload (binary) as message type typ. Returns false if it's too big to send.
 function Comm.Send(typ, payload, channel, target, prio)
-  local body = string.char(proto(), typ) .. payload
+  local body = string.char(FROZEN[typ] and Comm.FROZEN_PROTOCOL or proto(), typ) .. payload
   local wire = Util.escape(body)
   if #wire <= MAX then
     enqueue(wire, channel, target, prio)
     return true
+  end
+  if FROZEN[typ] then
+    ns.Debug("a frozen message must fit in one: %d bytes", #wire)
+    return false
   end
   local chunks = split(body)
   if #chunks > MAX_PARTS then
@@ -194,7 +209,8 @@ end
 
 local function dispatch(body, sender, channel)
   local version, typ = body:byte(1, 2)
-  if version ~= proto() or not typ then return end
+  if not typ then return end
+  if version ~= proto() and not (version == Comm.FROZEN_PROTOCOL and FROZEN[typ]) then return end
   local handler = Comm.handlers[typ]
   if not handler then return end
   local ok, err = pcall(handler, Bytes.reader(body, 3), sender, channel)

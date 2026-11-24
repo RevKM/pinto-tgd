@@ -2,14 +2,17 @@
 -- for that version. If the newer release can't share data with this one, or its stamp
 -- marks it as an important fix, the popup comes back at every login until the player
 -- updates. Popups wait until the player is out of combat and out of instances, and carry
--- the GitHub link in a box to copy, since WoW can't open links. The popup is Pinto's own
--- window: the game's popups are shared with its secure code, and an addon that shows one
--- taints it.
+-- the GitHub link in a box to copy, since WoW can't open links. Clicking the update notice
+-- by the minimap button shows it too. The popup is Pinto's own window: the game's popups
+-- are shared with its secure code, and an addon that shows one taints it.
 local ADDON, ns = ...
 
 local UI = ns.UI
 local Popups = {}
 UI.Popups = Popups
+
+local AVAILABLE = "Pinto %s is out! Update when you get a chance."
+local NEEDED = "Pinto needs an update to stay in sync with the guild."
 
 local shownNeeded = false
 local pending = false
@@ -82,11 +85,19 @@ function Popups.Check()
     ui.popups = ui.popups or {}
     if ui.popups[st.version] then return end
     ui.popups[st.version] = true
-    show(string.format("Pinto %s is out! Update when you get a chance.", st.version))
+    show(string.format(AVAILABLE, st.version))
   elseif not shownNeeded then
     shownNeeded = true
-    show("Pinto needs an update to stay in sync with the guild.")
+    show(NEEDED)
   end
+end
+
+-- The popup for the newest release, whenever asked (clicking the update notice).
+function Popups.ShowUpdate()
+  local status, st = ns.Release.Status()
+  if not status then return false end
+  show(status == "needed" and NEEDED or string.format(AVAILABLE, st.version))
+  return true
 end
 
 function Popups.Init()

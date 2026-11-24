@@ -1,8 +1,9 @@
 -- The minimap button: Pinto's head on the edge of the minimap. Drag it around the
 -- minimap; hover for Pinto's mood line; click to open the window size used last.
 -- When a Pinto quest finishes, a haunch pops up and the button gives a happy wiggle.
--- A small haunch badge stays on it until Pinto has eaten. After the login sync, the start
--- notice slides out beside it for a few seconds.
+-- A small haunch badge stays on it until Pinto has eaten. Notices slide out beside it for
+-- a few seconds, one at a time: the start notice after the login sync, and the others in
+-- UI/Notices.lua.
 local ADDON, ns = ...
 
 local UI = ns.UI
@@ -57,16 +58,32 @@ function MiniButton.Notify()
   MiniButton.Refresh()
 end
 
--- The start notice ---------------------------------------------------------------------------
--- A small note beside the button with a few words on how Pinto is (UI.Win.NoticeText). It
--- slides out from Pinto's head while it fades in, stays 8 seconds, and drifts a little
--- further while it fades out. It sits on the side of the button facing the middle of the
--- screen.
+-- Notices ------------------------------------------------------------------------------------
+-- A small note beside the button with a few words: how Pinto is after the login sync
+-- (UI.Win.NoticeText), a new version, finished quests waiting. It slides out from Pinto's
+-- head while it fades in, stays 8 seconds, and drifts a little further while it fades out.
+-- It sits on the side of the button facing the middle of the screen.
+--
+-- Notices take turns: one that comes while another shows waits in line, and comes in a
+-- moment after the one before has faded out, so none cuts another short. One that's no
+-- longer true by its turn (its still() says so) is skipped, and the same words are never
+-- in line twice. Clicking a note opens Pinto, or does what that notice is about, and sends
+-- the note on its way out.
 
 local NOTE_IN, NOTE_STAY, NOTE_OUT = 0.5, 8, 0.7
+local NOTE_PAUSE = 0.3  -- between one note fading out and the next coming in
 local NOTE_SLIDE = 14   -- how far it slides out from the button, in pixels
 local NOTE_GAP = 4
 local NOTE_ICON = 18    -- Pinto's head in it
+
+local queue = {}        -- { text, still, click } waiting their turn
+local playNext
+
+-- What clicking a notice does when it doesn't say: open the window size used last.
+local function openPinto()
+  if ns.disabled == "guild" then return end
+  if not UI.Active() then UI.Open(UI.Settings().last or "full") end
+end
 
 local function buildNote()
   local f = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -74,6 +91,14 @@ local function buildNote()
   f:SetFrameLevel(20)
   f:SetClampedToScreen(true)
   f:SetSize(160, 30)
+  f:EnableMouse(true)
+  f:SetScript("OnMouseUp", function(self, mouseButton)
+    if mouseButton ~= "LeftButton" or not self:IsShown() then return end
+    local click = self.click or openPinto
+    -- on its way out now, if it wasn't already
+    if self.t < NOTE_IN + NOTE_STAY then self.t = NOTE_IN + NOTE_STAY end
+    click()
+  end)
   if f.SetBackdrop then
     f:SetBackdrop({
       bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -125,17 +150,29 @@ local function stepNote(self, elapsed)
     if e >= 1 then
       self:SetScript("OnUpdate", nil)
       self:Hide()
+      self.phase, self.click = "gone", nil
+      if #queue > 0 then ns.After(NOTE_PAUSE, playNext) end
     end
   end
 end
 
-function MiniButton.ShowNotice(text)
+local function busy() return note ~= nil and note:IsShown() end
+
+-- Shows the next notice in line that's still true, if no note is showing.
+playNext = function()
+  if busy() then return end
   local anchor = (button and button:IsShown()) and button or Minimap
-  if not text or text == "" or not anchor then return end
+  if not anchor then return end
+  local n
+  repeat
+    n = table.remove(queue, 1)
+  until not n or not n.still or n.still()
+  if not n then return end
   note = note or buildNote()
-  note.text:SetText(text)
+  note.text:SetText(n.text)
   note:SetWidth(math.ceil(note.text:GetStringWidth()) + 6 + NOTE_ICON + 5 + 10)
   note.anchor = anchor
+  note.click = n.click
   local x = anchor:GetCenter()
   local scale = anchor:GetEffectiveScale() / UIParent:GetEffectiveScale()
   note.left = x ~= nil and x * scale > UIParent:GetWidth() / 2
@@ -146,7 +183,26 @@ function MiniButton.ShowNotice(text)
   note:SetScript("OnUpdate", stepNote)
 end
 
+-- Puts a notice in line. opts.still: checked when its turn comes, false skips it.
+-- opts.click: what clicking it does, instead of opening Pinto.
+function MiniButton.ShowNotice(text, opts)
+  if not text or text == "" then return end
+  if busy() and note.text:GetText() == text then return end
+  for _, n in ipairs(queue) do
+    if n.text == text then return end
+  end
+  queue[#queue + 1] = { text = text, still = opts and opts.still, click = opts and opts.click }
+  playNext()
+end
+
 function MiniButton.Notice() return note end
+
+-- The texts of the notices waiting their turn.
+function MiniButton.Waiting()
+  local list = {}
+  for i, n in ipairs(queue) do list[i] = n.text end
+  return list
+end
 function MiniButton.Button() return button, badge end
 
 function MiniButton.Init()
