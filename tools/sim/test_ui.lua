@@ -969,4 +969,140 @@ H.test("eating a finished quest: its text never comes back, the reward stays 3 s
   H.ok(errorsOf(kiri))
 end)
 
+H.test("/pinto nearby prints who in the group counts as nearby", function()
+  local world, kiri = setup(1796349600)
+  local slash = kiri.env.SlashCmdList.PINTO
+  slash("nearby")
+  H.ok(kiri.chat[#kiri.chat]:find("You're not in a group.", 1, true), tostring(kiri.chat[#kiri.chat]))
+  kiri.group, kiri.unitMap, kiri.zone = { full("Thorn") }, { party1 = full("Thorn") }, "Orgrimmar"
+  slash("nearby")
+  H.ok(kiri.chat[#kiri.chat - 1]:find("You're in Orgrimmar.", 1, true), tostring(kiri.chat[#kiri.chat - 1]))
+  H.ok(kiri.chat[#kiri.chat]:find(kiri.ns.Compat.ShortName(full("Thorn")) .. ": nearby (on your map)", 1, true),
+    tostring(kiri.chat[#kiri.chat]))
+  -- inside a dungeon the game gives no maps for: by sight, and the trace notes it
+  kiri.instance, kiri.noMaps, kiri.zone = { kind = "party", id = 36 }, true, "The Deadmines"
+  kiri:fire("ZONE_CHANGED_NEW_AREA")
+  world:run(20)
+  slash("nearby")
+  H.ok(kiri.chat[#kiri.chat - 1]:find("You're in The Deadmines, a dungeon.", 1, true), tostring(kiri.chat[#kiri.chat - 1]))
+  H.ok(kiri.chat[#kiri.chat]:find(": nearby (in sight)", 1, true), tostring(kiri.chat[#kiri.chat]))
+  local trace = kiri.env.PintoTGD_DB.trace
+  H.ok(trace and #trace.inside >= 1, "the trace noted the dungeon")
+  H.ok(trace.inside[1].place:find("zone=The Deadmines|roster=Orgrimmar", 1, true), trace.inside[1].place)
+  H.ok(errorsOf(kiri))
+end)
+
+H.test("the quest list's heading says whose quests they are", function()
+  -- each character has its own quests, and a run counts for the character that did it:
+  -- a player with two characters once took one's open quest for the other's
+  local world, kiri, clients = setup(1796349600)
+  kiri.ns.UI.Open("full")
+  world:run(2)
+  H.eq(kiri.ns.UI.QuestList.Header():GetText(), "Kiri's Pinto quests")
+  -- a name the game gives with letters beyond ASCII, and one ending in s
+  local ns = kiri.ns
+  local me = ns.me
+  ns.me = wow.NAMES == "realm" and "Sigrún-Forever" or "Sigrún Sigrúnson"
+  ns.UI.QuestList.Refresh(true)
+  H.eq(ns.UI.QuestList.Header():GetText(), "Sigrún's Pinto quests")
+  ns.me = wow.NAMES == "realm" and "Silas-Forever" or "Silas Marner"
+  ns.UI.QuestList.Refresh(true)
+  H.eq(ns.UI.QuestList.Header():GetText(), "Silas's Pinto quests")
+  -- before Pinto knows who the player is
+  ns.me = nil
+  H.eq(ns.UI.QuestList.HeadingText(), "Pinto quests")
+  ns.me = me
+  ns.UI.QuestList.Refresh(true)
+  H.eq(ns.UI.QuestList.Header():GetText(), "Kiri's Pinto quests")
+  H.ok(errorsOf(kiri))
+  H.ok(#clients > 1)
+end)
+
+H.test("the minimap button's tooltip says who counts as nearby, with no command typed", function()
+  local _, kiri = setup(1796349600)
+  local ns = kiri.ns
+  local button = ns.UI.MiniButton.Button()
+  local function tip()
+    button.scripts.OnEnter(button)
+    return ns.UI.Tip().body:GetText()
+  end
+  local mood = ns.UI.StatusLine()
+  local printed = #kiri.chat
+  H.ok(mood and mood ~= "", "Pinto's mood line")
+  H.eq(tip(), mood, "alone: the mood line and nothing more")
+  kiri.group, kiri.unitMap, kiri.zone = { full("Thorn") }, { party1 = full("Thorn") }, "Orgrimmar"
+  local thorn = ns.Compat.ShortName(full("Thorn"))
+  H.eq(tip(), mood .. "\n\nYou're in Orgrimmar.\n" .. thorn .. ": nearby (on your map)")
+  -- inside a dungeon the game gives no maps for
+  kiri.instance, kiri.noMaps, kiri.zone = { kind = "party", id = 36 }, true, "The Deadmines"
+  H.eq(tip(), mood .. "\n\nYou're in The Deadmines, a dungeon.\n" .. thorn .. ": nearby (in sight)")
+  -- a group of strangers
+  kiri.group, kiri.unitMap = { "Zed Stranger" }, { party1 = "Zed Stranger" }
+  H.eq(tip(), mood .. "\n\nYou're in The Deadmines, a dungeon.\nNo guildies in your group.")
+  H.eq(#kiri.chat, printed, "nothing goes to chat")
+  -- not while Pinto is off
+  ns.disabled = "newer"
+  H.ok(not tostring(tip()):find("You're in", 1, true), "no group lines while Pinto is off")
+  ns.disabled = nil
+  button.scripts.OnLeave(button)
+  H.ok(not ns.UI.Tip():IsShown())
+  H.ok(errorsOf(kiri))
+  -- a fault in the group lines is reported, and the mood line still shows
+  kiri.env.geterrorhandler = function() return function(err) kiri.errors[#kiri.errors + 1] = err end end
+  ns.Activity.Describe = function() error("a fault in the lines") end
+  H.eq(tip(), mood)
+  H.eq(#kiri.errors, 1)
+  H.ok(tostring(kiri.errors[1]):find("a fault in the lines", 1, true), tostring(kiri.errors[1]))
+end)
+
+H.test("updated while the game runs: without the new version's new files Pinto still starts, and says to restart the game", function()
+  -- the game only finds an addon's new files when it starts. After an update in the middle
+  -- of a session, a reload runs the new version without the files it added: those that
+  -- came after 0.1.1, or after 0.1.0.
+  local since = {
+    ["0.1.1"] = { ["Track/Guild.lua"] = true, ["Track/Trace.lua"] = true },
+    ["0.1.0"] = { ["Track/Guild.lua"] = true, ["Track/Trace.lua"] = true, ["UI/Notices.lua"] = true },
+  }
+  for from, new in pairs(since) do
+    local world = wow.world({ seed = 23, time = 1796349600 })
+    for i, n in ipairs(NAMES) do world:addMember(full(n), { rankIndex = i == 1 and 0 or 2, level = 40 }) end
+    local skipped = 0
+    world.skipFile = function(f)
+      if new[f] then skipped = skipped + 1 end
+      return new[f] == true
+    end
+    local kiri = world:client(full("Kiri"), { ui = true })
+    kiri:login()
+    world:run(90)
+    local ns = kiri.ns
+    H.ok(skipped > 0 and ns.Guild == nil and ns.Trace == nil, "the stand-in client should have left the new files out")
+    H.eq(ns.UI.Notices == nil, from == "0.1.0")
+    H.ok(errorsOf(kiri))
+    local said = 0
+    for _, line in ipairs(kiri.chat) do
+      if line:find("Pinto was updated while the game was running. Exit the game and start it again to finish the update.", 1, true) then
+        said = said + 1
+      end
+    end
+    H.eq(said, 1, "from " .. from .. ": the chat says to restart the game, once")
+    -- everything else runs: quests are rolled, the window opens, a group is tracked
+    local set = ns.Quests.Piece() and ns.Quests.Piece().sets[ns.Util.nameId(kiri.name)]
+    H.ok(set, "from " .. from .. ": this week's quests are rolled")
+    ns.UI.Open("full")
+    world:run(5)
+    kiri.group, kiri.unitMap = { full("Thorn") }, { party1 = full("Thorn") }
+    kiri:fire("GROUP_ROSTER_UPDATE")
+    world:run(30)
+    H.ok(ns.Log.OpenSession(), "from " .. from .. ": the group is tracked without the trace")
+    ns.Events.Fire("PINTO_QUESTS")
+    world:run(2)
+    H.ok(errorsOf(kiri))
+  end
+  -- with every file there, nothing is said
+  local world2, kiri2 = setup(1796349600)
+  for _, line in ipairs(kiri2.chat) do
+    H.ok(not line:find("updated while the game was running", 1, true), "a complete install says nothing: " .. line)
+  end
+end)
+
 H.finish()

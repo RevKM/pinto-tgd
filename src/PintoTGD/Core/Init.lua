@@ -46,6 +46,7 @@ local READS = {
   CHAT_MSG_ADDON = { [1] = true, [2] = true, [3] = true, [4] = true },
   CHAT_MSG_LOOT = { [1] = true },
   CHAT_MSG_SYSTEM = { [1] = true },
+  CHAT_MSG_TEXT_EMOTE = { [1] = true, [2] = true },   -- the emote's text, who did it
   UI_INFO_MESSAGE = { [1] = true, [2] = true },
   -- a boss fight's start and end matter even when the boss can't be named
   ENCOUNTER_START = {},
@@ -153,6 +154,17 @@ function ns.Debug(fmt, ...)
     local ok, text = pcall(string.format, fmt, ...)
     DEFAULT_CHAT_FRAME:AddMessage("|cff888888Pinto debug:|r " .. (ok and text or fmt))
   end
+end
+
+-- A file of this version didn't load. The game only finds an addon's new files when it
+-- starts, so after an update in the middle of a session, a reload runs the new version
+-- without the files it added. Pinto runs without them (whoever uses such a file checks
+-- that it's there) and says once per login how to finish the update.
+local toldUnfinished = false
+function ns.UpdateUnfinished()
+  if toldUnfinished then return end
+  toldUnfinished = true
+  ns.Print("Pinto was updated while the game was running. Exit the game and start it again to finish the update.")
 end
 
 ns.report = report

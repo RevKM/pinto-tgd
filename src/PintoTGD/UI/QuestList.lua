@@ -188,8 +188,19 @@ end
 
 local rerolling   -- the reroll animation, while it plays
 
+-- The heading says whose quests these are. Each character has its own quests, and what
+-- it does counts for its own: a dungeon run on one character finishes nothing on another.
+-- A player with two characters took one's open quest for the other's before this said so.
+function QuestList.HeadingText()
+  local me = ns.me
+  local first = me and (Compat.FirstName(me) or Compat.ShortName(me))
+  if not first or first == "" then return "Pinto quests" end
+  return first .. "'s Pinto quests"
+end
+
 function QuestList.Refresh(force)
   if not panel or not panel:IsVisible() then return end
+  header:SetText(QuestList.HeadingText())
   if rerolling and not force then
     rerolling.stale = true   -- refreshed once the animation ends
     return
@@ -541,7 +552,7 @@ function QuestList.Build(parent)
   panel:SetAllPoints(parent)
   header = UI.Text(panel, "GameFontNormal")
   header:SetPoint("TOPLEFT", 0, -4)
-  header:SetText("Pinto quests")
+  header:SetText(QuestList.HeadingText())
   invites = UI.Text(panel, "GameFontNormalSmall")
   invites:SetWidth(WIDTH)
   footer = UI.Text(panel, "GameFontDisableSmall")
@@ -554,6 +565,7 @@ function QuestList.Build(parent)
 end
 
 function QuestList.Panel() return panel end
+function QuestList.Header() return header end
 function QuestList.Hoard() return hoard end
 function QuestList.Rows() return rows end
 

@@ -288,7 +288,9 @@ G.give = function(ctx, p)
       local k = keyOf(tr.who)
       if ok and p.to then ok = fills(ctx, p.to, k) end
       if ok and p.upgrade then
-        ok = tr.tags and tr.tags.gear
+        -- gear for a slot: newer clients give items that aren't gear an equip location
+        -- too, and logs from before 0.1.2 tagged those as gear
+        ok = tr.tags and tr.tags.gear and SLOT_OF[tr.tags.equipLoc] ~= nil
         if ok then
           local worn = Blocks.WornLevel(tr.who, tr.tags.equipLoc)
           ok = worn == nil or (tr.tags.ilvl or 0) > worn
@@ -324,6 +326,28 @@ G.receive = function(ctx, p)
   end
   return false, 0, 1
 end
+
+-- Moments from the log (Track/Activity.lua, Track/Guild.lua). Each kind is a block of its
+-- own, so a version that can't notice a kind skips its quests instead of rolling ones it
+-- could never finish. guildies: how many guildies nearby in the group, at least.
+local function moments(ctx, kind, p)
+  local n, members = 0, {}
+  local least = p.guildies or 0
+  for _, m in ipairs(ns.Log.Moments(ctx.log)) do
+    if m.kind == kind and count(m.guildies) >= least then
+      n = n + (m.count or 1)
+      addAll(members, m.guildies)
+    end
+  end
+  local need = p.count or 1
+  return n >= need, math.min(n, need), need, n > 0 and { members = members } or nil
+end
+
+G.camp = function(ctx, p) return moments(ctx, "camp", p) end           -- a campfire lit, then a feature added
+G.dance = function(ctx, p) return moments(ctx, "dance", p) end         -- a dance together
+G.jolly = function(ctx, p) return moments(ctx, "jolly", p) end         -- cheering, clapping or congratulating together
+G.invite = function(ctx, p) return moments(ctx, "invite", p) end       -- someone new invited, who joined
+G.deposit = function(ctx, p) return moments(ctx, "deposit", p) end     -- something crafted put in the guild bank
 
 -- Needs: who can get a quest ----------------------------------------------------------
 
@@ -362,6 +386,40 @@ end
 N.any = function(ctx, list)
   for _, need in ipairs(type(list) == "table" and list or {}) do
     if Blocks.CheckNeed(ctx, need) then return true end
+  end
+  return false
+end
+-- The client's language starts with this, like "en": for quests that read emote texts.
+N.locale = function(ctx, prefix)
+  return type(prefix) == "string" and Compat.Locale():sub(1, #prefix) == prefix
+end
+N.can_invite = function() return Compat.CanGuildInvite() end
+-- Rare: one week in n, for each character. The same all week, so every slot and a reroll
+-- agree.
+N.rare = function(ctx, n)
+  n = tonumber(n) or 1
+  return Util.hash(string.format("%d|%s", ctx.week, ctx.me)) % n == 0
+end
+-- Not among the character's quests last week: a template id, for quests that shouldn't
+-- come two weeks running.
+N.not_last_week = function(ctx, id)
+  local wp = ns.Quests.Piece(ctx.week - 1)
+  local set = wp and wp.sets[Util.nameId(ctx.me)]
+  for _, q in pairs(set and set.quests or {}) do
+    if q.t == id then return false end
+  end
+  return true
+end
+-- The player has opened the guild bank: the guild has one and they use it.
+N.bank = function() return PintoTGD_DB.bankSeen == true end
+-- Can set up camp (Forever): Cooking for the campfire, and a camp feature to add, which
+-- takes a profession at 20 for its first camp item, or Cooking at 140 for Cookie's Feast.
+N.camper = function(ctx)
+  local s = ctx.skills
+  if (s.cook or 0) < 1 then return false end
+  if (s.cook or 0) >= 140 or (s.aid or 0) >= 20 or (s.fish or 0) >= 20 then return true end
+  for id = 1, #Pieces.PROFESSIONS do
+    if (s[id] or 0) >= 20 then return true end
   end
   return false
 end

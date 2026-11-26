@@ -11,7 +11,8 @@ function UI.Init()
   UI.Win.Init()
   if not ns.disabled then
     UI.Popups.Init()
-    UI.Notices.Init()
+    -- Notices.lua came with 0.1.1: not there after an update from 0.1.0 while the game ran
+    if UI.Notices then UI.Notices.Init() else ns.UpdateUnfinished() end
     local pending = false
     local function refresh()
       if pending then return end

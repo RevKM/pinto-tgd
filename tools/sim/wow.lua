@@ -70,6 +70,10 @@ wow.SPELLS = {
   [133] = "Fireball", [836] = "LOGINEFFECT", [3267] = "First Aid", [7927] = "First Aid",
 }
 
+-- The spell an item casts when used, for GetItemSpell: item id -> spell id. Empty unless
+-- a test sets one, like a client that hasn't the item cached.
+wow.ITEM_SPELLS = {}
+
 local World = {}
 World.__index = World
 
@@ -273,6 +277,19 @@ function World:client(name, opts)
     target = nil,          -- full name of the target
     inCombat = {},         -- full name -> true, for group members in combat
     hideMaps = false,      -- C_Map answers with secrets, like in combat on Forever
+    noMaps = false,        -- C_Map has no map for anyone, like inside an instance without one
+    maps = {},             -- full name -> map id (false: none), for group members elsewhere
+    zone = nil,            -- GetRealZoneText: the zone or instance by name
+    hideNames = false,     -- UnitName answers with secrets for group members
+    hideInstance = false,  -- IsInInstance and the instance's id come as secrets
+    inRange = {},          -- full name -> true, for group members within spell range
+    unseen = {},           -- full name -> true, for group members out of sight
+    offline = {},          -- full name -> true, for group members who are offline
+    hideSight = false,     -- UnitIsVisible answers with secrets
+    guildOf = {},          -- full name -> guild name (false: none), for group members; by default
+                           -- the world's guild for its members and none for anyone else
+    hideGuild = false,     -- UnitIsInMyGuild and a group member's guild name come as secrets
+    hideRoster = false,    -- the guild roster's rows come with the name and zone as secrets
     lockdown = false,      -- addon messages locked down, like during a boss encounter
   }, Client)
   self.clients[name] = c
@@ -397,6 +414,7 @@ function Client:makeEnv()
   env.UnitName = function(unit)
     if unit == "player" then return nameParts(c.name) end
     local m = (unit == "target" and c.target) or (c.unitMap and c.unitMap[unit])
+    if m and c.hideNames then return wow.secret(), wow.secret() end
     if m then return nameParts(m) end
     return nil
   end
@@ -422,15 +440,42 @@ function Client:makeEnv()
     local x, y = who(a), who(b)
     return x ~= nil and x == y
   end
-  env.UnitIsConnected = function() return true end
+  env.UnitIsConnected = function(unit)
+    local name = who(unit)
+    return not (name and c.offline[name])
+  end
+  env.UnitIsVisible = function(unit)
+    local name = who(unit)
+    if not name then return false end
+    if c.hideSight then return wow.secret() end
+    return not c.unseen[name]
+  end
   env.issecretvalue = wow.isSecret
   env.GetRealmName = function() return c:realm() end
   env.GetNormalizedRealmName = function() return (c:realm():gsub("%s", "")) end
   env.IsInGuild = function() return world:member(c.name) ~= nil end
+  -- the guild a group member is in, by name, or nil
+  local function guildOf(name)
+    local set = c.guildOf[name]
+    if set ~= nil then return set or nil end
+    return world:member(name) and world.guild or nil
+  end
   env.GetGuildInfo = function(unit)
+    if unit ~= nil and unit ~= "player" then
+      local name = who(unit)
+      if not name then return nil end
+      if c.hideGuild then return wow.secret() end
+      return guildOf(name)
+    end
     local m = world:member(c.name)
     if not m then return nil end
     return world.guild, "Rank" .. m.rankIndex, m.rankIndex
+  end
+  env.UnitIsInMyGuild = function(unit)
+    local name = who(unit)
+    if not name then return false end
+    if c.hideGuild then return wow.secret() end
+    return world:member(c.name) ~= nil and guildOf(name) == world.guild
   end
   env.GetNumGuildMembers = function()
     local online = 0
@@ -445,6 +490,10 @@ function Client:makeEnv()
     if not m then return nil end
     local cl = world.clients[m.name]
     local online = (cl and cl.online) or m.online or false
+    if c.hideRoster then
+      return wow.secret(), "Rank" .. m.rankIndex, m.rankIndex, m.level, m.class, wow.secret(), m.note, "",
+        online, 0, m.class, 0, 0, false, false, 0, wow.secret()
+    end
     return m.name, "Rank" .. m.rankIndex, m.rankIndex, m.level, m.class, m.zone, m.note, "",
       online, 0, m.class, 0, 0, false, false, 0, "Player-1-" .. m.name
   end
@@ -468,10 +517,12 @@ function Client:makeEnv()
   env.IsTrialAccount = function() return c.opts.trial or false end
   env.IsVeteranTrialAccount = function() return false end
   env.IsInInstance = function()
+    if c.hideInstance then return wow.secret(), wow.secret() end
     if c.instance.kind == "none" then return false, "none" end
     return true, c.instance.kind
   end
   env.GetInstanceInfo = function()
+    if c.hideInstance then return "Instance", wow.secret(), 1, "Normal", 5, 0, false, wow.secret() end
     return "Instance", c.instance.kind, 1, "Normal", 5, 0, false, c.instance.id
   end
   env.InCombatLockdown = function() return c.combat end
@@ -484,10 +535,23 @@ function Client:makeEnv()
   env.IsInRaid = function() return #c.group > 4 end
   env.GetNumGroupMembers = function() return #c.group > 0 and #c.group + 1 or 0 end
   env.GetNumSubgroupMembers = function() return #c.group end
-  env.C_Map = { GetBestMapForUnit = function()
+  env.C_Map = { GetBestMapForUnit = function(unit)
     if c.hideMaps then return wow.secret() end
+    -- a group member's own map comes first: someone still outside has one while the
+    -- player, inside an instance, has none
+    local name = unit ~= "player" and who(unit) or nil
+    local theirs = nil
+    if name then theirs = c.maps[name] end
+    if theirs ~= nil then return theirs or nil end
+    if c.noMaps then return nil end
     return c.mapId
   end }
+  env.GetRealZoneText = function() return c.zone end
+  env.UnitInRange = function(unit)
+    local name = who(unit)
+    if name and c.inRange[name] then return true, true end
+    return false, false
+  end
 
   -- character details the tracking reads. Test item links carry what the client would
   -- know about the item: "item:2589 class:7:5 equip:INVTYPE_BAG ilvl:20".
@@ -501,6 +565,11 @@ function Client:makeEnv()
       return id, "", "", link:match("equip:([%w_]+)") or "", 0, tonumber(classID), tonumber(subclassID)
     end,
     GetDetailedItemLevelInfo = function(link) return tonumber((link or ""):match("ilvl:(%d+)")) end,
+    GetItemSpell = function(item)
+      local spell = wow.ITEM_SPELLS[tonumber(item) or tonumber(tostring(item):match("item:(%d+)"))]
+      if not spell then return nil end
+      return wow.SPELLS[spell] or "Spell", spell
+    end,
   }
   -- PINTO_API=modern: items only through C_Item, the way newer clients have them
   if os.getenv("PINTO_API") == "modern" or c.opts.modernItems then

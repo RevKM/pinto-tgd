@@ -63,8 +63,8 @@ function Popups.Frame() return frame end
 
 local function busy()
   if InCombatLockdown and InCombatLockdown() then return true end
-  local inInstance = IsInInstance()
-  return inInstance and true or false
+  -- through Compat: the client can hide whether this is an instance
+  return ns.Compat.InstanceKind() ~= "none"
 end
 
 function Popups.Check()

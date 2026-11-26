@@ -86,7 +86,7 @@ function Compat.Surnames()
     else
       -- without the flag: UnitName gives older clients no realm for the player
       local name, second = UnitName("player")
-      if name and not ns.AnySecret(name, second) then surnames = second ~= nil and second ~= "" end
+      if not ns.AnySecret(name, second) and name then surnames = second ~= nil and second ~= "" end
     end
   end
   return surnames == true
@@ -122,10 +122,11 @@ function Compat.FullName(name, second)
 end
 
 -- Nil while the client hides the unit's name. UnitNameUnmodified, where the client has
--- it, ignores display options such as a hidden surname.
+-- it, ignores display options such as a hidden surname. The check for a secret comes
+-- before any other look at the name: even "not name" raises an error on a hidden one.
 function Compat.UnitFullName(unit)
   local name, second = (UnitNameUnmodified or UnitName)(unit)
-  if not name or ns.AnySecret(name, second) or name == UNKNOWNOBJECT then return nil end
+  if ns.AnySecret(name, second) or not name or name == UNKNOWNOBJECT then return nil end
   return Compat.FullName(name, second)
 end
 
@@ -161,9 +162,11 @@ function Compat.RequestRoster()
   end
 end
 
--- One roster row, normalized. lastOnlineDays is nil while the member is online.
+-- One roster row, normalized. lastOnlineDays is nil while the member is online. Nil when
+-- there's no such row; false while the client hides any of it.
 function Compat.RosterEntry(i)
   local name, _, rankIndex, level, _, zone, note, _, online, _, classFile = GetGuildRosterInfo(i)
+  if ns.AnySecret(name, rankIndex, level, zone, note, online, classFile) then return false end
   if not name then return nil end
   local entry = {
     name = Compat.FullName(name),
@@ -176,6 +179,7 @@ function Compat.RosterEntry(i)
   }
   if not entry.online and GetGuildRosterLastOnline then
     local years, months, days, hours = GetGuildRosterLastOnline(i)
+    if ns.AnySecret(years, months, days, hours) then return false end
     entry.lastOnlineDays = (years or 0) * 365 + (months or 0) * 30 + (days or 0) + (hours or 0) / 24
   end
   return entry
@@ -183,12 +187,44 @@ end
 
 function Compat.NumRoster()
   local total = GetNumGuildMembers()
-  return total or 0
+  if ns.Secret(total) or type(total) ~= "number" then return 0 end
+  return total
 end
 
 function Compat.GuildName()
   if not IsInGuild() then return nil end
   return (GetGuildInfo("player"))
+end
+
+-- Whether this character may invite players to the guild.
+function Compat.CanGuildInvite()
+  local fn = (C_GuildInfo and C_GuildInfo.CanGuildInvite) or CanGuildInvite
+  if not fn then return false end
+  local ok, can = pcall(fn)
+  return ok and can and true or false
+end
+
+-- The spell an item casts when it's used, or nil (also while the client hasn't the item
+-- cached).
+function Compat.ItemSpell(itemID)
+  local fn = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+  if not fn or not itemID then return nil end
+  local ok, _, spellID = pcall(fn, itemID)
+  if not ok or ns.Secret(spellID) or type(spellID) ~= "number" then return nil end
+  return spellID
+end
+
+-- How many of an item are in the player's bags.
+function Compat.ItemCount(itemID)
+  local fn = (C_Item and C_Item.GetItemCount) or GetItemCount
+  if not fn or not itemID then return 0 end
+  local ok, n = pcall(fn, itemID)
+  return ok and tonumber(n) or 0
+end
+
+-- The client's language, like "enUS" or "deDE".
+function Compat.Locale()
+  return GetLocale and GetLocale() or "enUS"
 end
 
 function Compat.PlayerRankIndex()
@@ -198,15 +234,46 @@ end
 
 -- Groups and places ----------------------------------------------------------------
 
+-- The kind of instance the player is in ("party", "raid", "pvp", "arena"), or "none".
+-- While the client hides it, the last answer stands.
+local lastKind, lastInstance = "none", 0
 function Compat.InstanceKind()
   local inInstance, kind = IsInInstance()
-  if not inInstance then return "none" end
-  return kind or "none"
+  if ns.AnySecret(inInstance, kind) then return lastKind end
+  lastKind = inInstance and type(kind) == "string" and kind or "none"
+  return lastKind
 end
 
+-- The id of the instance or continent the player is in. While the client hides it, the
+-- last answer stands.
 function Compat.InstanceID()
   local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
-  return instanceID or 0
+  if ns.Secret(instanceID) then return lastInstance end
+  lastInstance = type(instanceID) == "number" and instanceID or 0
+  return lastInstance
+end
+
+-- What the client says about where the player is, for the trace: the instance's name,
+-- type, difficulty, size and id, as text.
+local function infoText(v)
+  if ns.Secret(v) then return "hidden" end
+  if v == nil then return "" end
+  return tostring(v)
+end
+
+function Compat.InstanceInfo()
+  local name, kind, difficulty, _, size, _, _, id = GetInstanceInfo()
+  return table.concat({ infoText(name), infoText(kind), infoText(difficulty), infoText(size), infoText(id) }, "|")
+end
+
+-- The zone or instance the player is in, by name ("Wailing Caverns"): the way the guild
+-- roster names a member's zone. Nil while the client doesn't say.
+function Compat.ZoneText()
+  local fn = GetRealZoneText or GetZoneText
+  if not fn then return nil end
+  local zone = fn()
+  if ns.Secret(zone) or type(zone) ~= "string" or zone == "" then return nil end
+  return zone
 end
 
 -- The map a unit is on: nil when unknown, false while the client hides it.
@@ -237,6 +304,49 @@ function Compat.IsConnected(unit)
   local v = UnitIsConnected(unit)
   if ns.Secret(v) then return nil end
   return v
+end
+
+-- Whether a unit is close enough for the client to show it (about 100 yards); nil while
+-- the client hides it or can't say.
+function Compat.IsVisible(unit)
+  if not UnitIsVisible then return nil end
+  local v = UnitIsVisible(unit)
+  if ns.Secret(v) then return nil end
+  return v and true or false
+end
+
+-- Whether a group member is within reach of the player's helpful spells (about 40
+-- yards); nil while the client hides it or hasn't checked.
+function Compat.InRange(unit)
+  if not UnitInRange then return nil end
+  local inRange, checked = UnitInRange(unit)
+  if ns.AnySecret(inRange, checked) or not checked then return nil end
+  return inRange and true or false
+end
+
+-- The game's own word on a group member's guild, a second opinion next to the guild
+-- roster. Two answers: whether it's the player's guild (nil when the client hides that, or
+-- has no such call), and how the unit's guild name compares with the player's: "same",
+-- "other", "none" (no guild, or too far away for the client to know), or nil while hidden.
+function Compat.UnitGuild(unit)
+  local inMine, relation
+  if UnitIsInMyGuild then
+    local ok, v = pcall(UnitIsInMyGuild, unit)
+    -- checked for a secret first: a hidden answer can't even be compared with nil
+    if ok and not ns.Secret(v) and v ~= nil then inMine = v and true or false end
+  end
+  if GetGuildInfo then
+    local ok, theirs = pcall(GetGuildInfo, unit)
+    local mine = Compat.GuildName()
+    if ok and not ns.AnySecret(theirs, mine) and type(mine) == "string" then
+      if type(theirs) ~= "string" or theirs == "" then
+        relation = "none"
+      else
+        relation = theirs == mine and "same" or "other"
+      end
+    end
+  end
+  return inMine, relation
 end
 
 -- Group member units, not including the player.
@@ -393,12 +503,4 @@ function Compat.ItemID(link)
   if not link then return nil end
   local id = link:match("item:(%d+)")
   return id and tonumber(id) or nil
-end
-
-function Compat.Inspect(unit)
-  if CanInspect and CanInspect(unit) and CheckInteractDistance and CheckInteractDistance(unit, 1) then
-    NotifyInspect(unit)
-    return true
-  end
-  return false
 end

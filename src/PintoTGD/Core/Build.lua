@@ -2,11 +2,11 @@
 local ADDON, ns = ...
 
 ns.Build = {
-  version = "0.1.1",
+  version = "0.1.2",
   dataVersion = 1,
   protocolVersion = 1,
   formulaVersion = 1,
-  questPack = 2,
+  questPack = 3,
   -- The go-live date, in server time. Nothing is recorded before it.
   goLive = "2026-11-23",
   -- Test builds carry their own date and keep their data apart from release data.

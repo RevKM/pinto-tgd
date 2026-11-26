@@ -52,7 +52,7 @@ H.test("the embedded quest pack decodes and this version supports every template
   setup(GO + 2)
   local pack = Pack.Get(Pack.Newest())
   H.ok(pack, "no pack")
-  H.eq(#pack.ids, 36)
+  H.eq(#pack.ids, 41)
   for _, id in ipairs(pack.ids) do
     H.ok(pack.templates[id].supported, "template " .. id .. " uses an unknown block")
   end
@@ -236,6 +236,154 @@ H.test("crafting quests: 3 crafted gifts, then a group with each", function()
   H.ok(Quests.Piece().done[Pieces.doneKey(Util.nameId(ns.me), 1)], "not done after grouping with all 3")
 end)
 
+-- The set of template ids a roll gave.
+local function rolled(week)
+  local set = Quests.Roll(week)
+  local ids = {}
+  for _, q in ipairs(set and set.quests or {}) do ids[q.t] = true end
+  return ids
+end
+
+local function afterCalibration()
+  local today = GO + 14
+  setup(today)
+  for d = GO, today do
+    Store.SetHistory(d, { H = 5000, W = 3000, Q = 0, G = 0, P = 0, T = 0, K = 0, N = 8, fv = 1, data = 5 })
+  end
+  return Time.week(today)
+end
+
+local function rollsOf(week, id, times)
+  local n = 0
+  for _ = 1, times do
+    if rolled(week)[id] then n = n + 1 end
+  end
+  return n
+end
+
+H.test("new quests: who can get them", function()
+  local week = afterCalibration()
+  local ctx = Quests.Context(ns.me, week)
+  local function need(...) return Blocks.CheckNeed(ctx, { ... }) end
+  -- the dance and cheering quests read English emote texts: English clients only
+  env.GetLocale = function() return "deDE" end
+  H.eq(need("locale", "en"), false)
+  H.eq(rollsOf(week, 114, 40), 0, "never on a German client")
+  H.eq(rollsOf(week, 115, 40), 0, "never on a German client")
+  env.GetLocale = function() return "enUS" end
+  H.eq(need("locale", "en"), true)
+  H.ok(rollsOf(week, 114, 40) > 0, "rolled on an English client")
+  H.ok(rollsOf(week, 115, 40) > 0, "rolled on an English client")
+  -- the camp quest: Cooking for the campfire, and a profession at 20 for a camp feature,
+  -- or Cooking at 140 for Cookie's Feast
+  local skills = ctx.skills
+  for _, case in ipairs({
+    { { cook = 1, aid = 0, fish = 0 }, false, "Cooking alone" },
+    { { cook = 1, aid = 0, fish = 0, [7] = 20 }, true, "Cooking and Mining at 20" },
+    { { cook = 1, aid = 0, fish = 0, [9] = 19 }, false, "Tailoring below 20" },
+    { { cook = 0, aid = 0, fish = 0, [9] = 300 }, false, "no Cooking" },
+    { { cook = 5, aid = 0, fish = 20 }, true, "Fishing at 20" },
+    { { cook = 5, aid = 20, fish = 0 }, true, "First Aid at 20" },
+    { { cook = 140, aid = 0, fish = 0 }, true, "Cooking at 140" },
+  }) do
+    ctx.skills = case[1]
+    H.eq(need("camper"), case[2], case[3])
+  end
+  ctx.skills = skills
+  -- the guild bank quest: for crafters who've opened the guild bank
+  H.eq(need("bank"), false)
+  env.PintoTGD_DB.bankSeen = true
+  H.eq(need("bank"), true)
+  -- the invite quest: for those who can invite
+  env.CanGuildInvite = nil
+  H.eq(need("can_invite"), false, "a client without the call: nobody")
+  env.CanGuildInvite = function() return false end
+  H.eq(need("can_invite"), false)
+  env.CanGuildInvite = function() return true end
+  H.eq(need("can_invite"), true)
+end)
+
+H.test("the invite quest: about one week in four, and never two weeks running", function()
+  local week = afterCalibration()
+  -- rare: the same answer all week, and true about one week in 4
+  local yes = 0
+  for w = week, week + 399 do
+    local ctx = Quests.Context(ns.me, w)
+    local a = Blocks.CheckNeed(ctx, { "rare", 4 })
+    H.eq(Blocks.CheckNeed(ctx, { "rare", 4 }), a, "the same answer all week")
+    if a then yes = yes + 1 end
+  end
+  H.ok(yes > 60 and yes < 140, "rare 4 held in " .. yes .. " weeks of 400")
+  -- in a week it can come, officers can roll it; not the week after it came
+  env.CanGuildInvite = function() return true end
+  local rare = Blocks.needs.rare
+  Blocks.needs.rare = function() return true end
+  H.ok(rollsOf(week, 113, 40) > 0, "officers roll it")
+  local ctx = Quests.Context(ns.me, week)
+  H.eq(Blocks.CheckNeed(ctx, { "not_last_week", 113 }), true)
+  Store.SetQuestSet(week - 1, ns.me, { created = 1, author = 1, pack = Pack.Newest(),
+    quests = { { t = 101, worth = 1, named = {} }, { t = 102, worth = 1, named = {} }, { t = 113, worth = 2, named = {} },
+      { t = 201, worth = 2, named = {} }, { t = 104, worth = 2, named = {} } } })
+  H.eq(Blocks.CheckNeed(ctx, { "not_last_week", 113 }), false)
+  H.eq(rollsOf(week, 113, 40), 0, "not the week after it came")
+  Blocks.needs.rare = rare
+  env.CanGuildInvite = function() return false end
+end)
+
+H.test("new quests: an invite, a dance with 3, a camp and the guild bank finish them", function()
+  local today = GO + 2
+  setup(today)
+  local me = Util.nameId(ns.me)
+  Store.SetQuestSet(Time.week(today), ns.me, { created = 1, author = 1, pack = Pack.Newest(),
+    quests = { { t = 113, worth = 2, named = {} }, { t = 114, worth = 2, named = {} }, { t = 213, worth = 2, named = {} },
+      { t = 214, worth = 1, named = {} }, { t = 1, worth = 1, named = {} } } })
+  local function done(slot) return Quests.Piece().done[Pieces.doneKey(me, slot)] ~= nil end
+  Quests.Check()
+  for slot = 1, 4 do H.eq(done(slot), false, "slot " .. slot .. " done too soon") end
+  Log.AddMoment("invite")
+  Log.AddMoment("dance", { [full("Thorn")] = true, [full("Bram")] = true })
+  Log.AddMoment("camp", { [full("Thorn")] = true })
+  Log.AddMoment("deposit", nil, 1)
+  Quests.Check()
+  H.eq(done(1), true, "invited someone new")
+  H.eq(done(2), false, "a dance with 2 isn't enough")
+  H.eq(done(3), true, "a camp for Thorn")
+  H.eq(done(4), true, "something put in the guild bank")
+  Log.AddMoment("dance", { [full("Thorn")] = true, [full("Bram")] = true, [full("Ash")] = true })
+  Quests.Check()
+  H.eq(done(2), true, "a dance with 3")
+end)
+
+H.test("cheering together with 3 guildies finishes the cheering quest, and dancing doesn't", function()
+  local today = GO + 2
+  setup(today)
+  local me = Util.nameId(ns.me)
+  Store.SetQuestSet(Time.week(today), ns.me, { created = 1, author = 1, pack = Pack.Newest(),
+    quests = { { t = 115, worth = 2, named = {} }, { t = 101, worth = 1, named = {} }, { t = 102, worth = 1, named = {} },
+      { t = 201, worth = 2, named = {} }, { t = 1, worth = 1, named = {} } } })
+  local function done(slot) return Quests.Piece().done[Pieces.doneKey(me, slot)] ~= nil end
+  local three = { [full("Thorn")] = true, [full("Bram")] = true, [full("Ash")] = true }
+  Log.AddMoment("dance", three)
+  Log.AddMoment("jolly", { [full("Thorn")] = true, [full("Bram")] = true })
+  Quests.Check()
+  H.eq(done(1), false, "a dance, and cheering with 2")
+  Log.AddMoment("jolly", three)
+  Quests.Check()
+  H.eq(done(1), true, "cheering with 3")
+end)
+
+H.test("an upgrade is gear for a slot: food an older build tagged as gear isn't one", function()
+  local today = GO + 2
+  setup(today)
+  local ctx = Quests.Context(ns.me, Time.week(today))
+  ctx.vars = {}
+  Log.AddTrade("out", full("Thorn"), Pieces.TRADE.crafted, 1082, 7,
+    { gear = true, food = true, equipLoc = "INVTYPE_NON_EQUIP_IGNORE", ilvl = 15 })
+  H.eq((Blocks.goals.give(ctx, { kind = "crafted", upgrade = true })), false, "food is no upgrade")
+  Log.AddTrade("out", full("Thorn"), Pieces.TRADE.crafted, 2000, 1, { gear = true, equipLoc = "INVTYPE_FEET", ilvl = 20 })
+  H.eq((Blocks.goals.give(ctx, { kind = "crafted", upgrade = true })), true, "boots Thorn isn't known to wear better than")
+end)
+
 H.test("the reroll swaps one quest for the spare, once a week", function()
   local today = GO + 2
   setup(today)
@@ -363,6 +511,46 @@ H.test("test tools: a character's quests for the week can be rolled again", func
   ns.Build.testTools = false
   H.eq(Quests.TestRefresh(), false, "beta and release builds never roll again")
   ns.Build.testTools = true
+end)
+
+-- From the game's events to finished quests. Last in this file: it starts the tracking,
+-- which then keeps running for this client.
+H.test("a full run of a dungeon the game gives no maps for finishes the dungeon quests", function()
+  local today = GO + 2
+  setup(today)
+  local me = Util.nameId(ns.me)
+  Store.SetQuestSet(Time.week(today), ns.me, { created = 1, author = 1, pack = Pack.Newest(),
+    quests = { { t = 8, worth = 2, named = {} }, { t = 12, worth = 3, named = {} }, { t = 1, worth = 1, named = {} },
+      { t = 11, worth = 3, named = {} }, { t = 10, worth = 3, named = {} } } })
+  local function done(slot) return Quests.Piece().done[Pieces.doneKey(me, slot)] ~= nil end
+  ns.Activity.Init()
+  local four = { "Thorn", "Bram", "Ash", "Wren" }
+  client.group, client.unitMap = {}, {}
+  for i, n in ipairs(four) do
+    client.group[i] = full(n)
+    client.unitMap["party" .. i] = full(n)
+  end
+  -- everyone together outside, then into the Deadmines, where there are no maps
+  client:fire("GROUP_ROSTER_UPDATE")
+  world:run(30)
+  client.instance, client.noMaps, client.zone = { kind = "party", id = 36 }, true, "The Deadmines"
+  client:fire("ZONE_CHANGED_NEW_AREA")
+  world:run(900)
+  client:fire("ENCOUNTER_END", 2741, "Rhahk'Zor", 1, 5, 1)
+  Quests.Check()
+  H.eq(done(1), false, "one boss in 15 minutes isn't a run yet")
+  world:run(600)
+  client:fire("ENCOUNTER_END", 2747, "Edwin VanCleef", 1, 5, 1)
+  Quests.Check()
+  H.eq(done(1), true, "a dungeon with at least 2 other guildies")
+  H.eq(done(2), true, "a dungeon with a full party of guildies")
+  local rec = Quests.Piece().done[Pieces.doneKey(me, 2)]
+  H.eq(#rec.members, 4)
+  H.eq(rec.inst, 36)
+  H.eq(rec.bosses, 2)
+  client.group, client.unitMap = {}, {}
+  client.instance, client.noMaps, client.zone = { kind = "none", id = 0 }, false, nil
+  H.eq(#client.errors, 0)
 end)
 
 H.finish()

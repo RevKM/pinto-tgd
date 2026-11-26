@@ -25,7 +25,7 @@ local lastPruneDay
 
 -- Started in this order.
 local MODULES = { "Roster", "Comm", "Protocol", "People", "Formula", "Pack", "Release", "Player",
-  "Activity", "Trades", "Health", "Quests", "Officer" }
+  "Activity", "Trades", "Guild", "Trace", "Health", "Quests", "Officer" }
 
 local function start()
   if ns.started then return end
@@ -53,11 +53,17 @@ local function start()
   Store.Prune(lastPruneDay)
 
   -- sync listens first, so every fact recorded from here on goes out live. A module that
-  -- fails to start is reported, and the others start anyway.
+  -- fails to start is reported, and the others start anyway. One whose file didn't load
+  -- is left out: the addon was updated while the game ran (ns.UpdateUnfinished).
   ns.account = ns.Player.AccountId()
   for _, name in ipairs(MODULES) do
-    local ok, err = pcall(ns[name].Init)
-    if not ok then ns.report(err) end
+    local module = ns[name]
+    if module == nil then
+      ns.UpdateUnfinished()
+    else
+      local ok, err = pcall(module.Init)
+      if not ok then ns.report(err) end
+    end
   end
 
   ns.Every(60, function()
@@ -133,6 +139,11 @@ SlashCmdList.PINTO = function(msg)
     if ns.UI and ns.UI.ToggleDebugPanel and PintoTGD_DB.debug then ns.UI.ToggleDebugPanel() end
   elseif cmd == "small" then
     if ns.UI then ns.UI.Open("small") end
+  elseif cmd == "nearby" then
+    -- who in the group Pinto counts as nearby right now, and what the game said
+    if ns.started and not ns.disabled then
+      for _, line in ipairs(ns.Activity.Describe()) do ns.Print(line) end
+    end
   elseif cmd == "test" and ns.Build.testTools then
     -- builds with the test tools only
     local sub, arg = rest:lower():match("^(%S*)%s*(.-)$")

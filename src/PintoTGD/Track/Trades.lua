@@ -64,7 +64,10 @@ function Trades.Classify(link, mine)
     if line == 171 or p == (Compat.SpellName(2259) or "Alchemy") or p == "Alchemy" then tags.potion = true end
     if line == 129 or p == (Compat.SpellName(3273) or "First Aid") or p == "First Aid" then tags.bandage = true end
   end
-  if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_BAG" and equipLoc ~= "INVTYPE_AMMO" then
+  -- gear: something worn. Newer clients, Forever's among them, give every other item
+  -- INVTYPE_NON_EQUIP_IGNORE where older ones gave nothing.
+  if equipLoc and equipLoc ~= "" and not equipLoc:find("^INVTYPE_NON_EQUIP")
+    and equipLoc ~= "INVTYPE_BAG" and equipLoc ~= "INVTYPE_AMMO" then
     tags.gear = true
     tags.ilvl = Compat.ItemLevel(link)
     tags.equipLoc = equipLoc

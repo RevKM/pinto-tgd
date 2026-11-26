@@ -3,7 +3,8 @@ python tools/release.py.
 
 First write the release's changes in CHANGELOG.md, under a new heading at the top:
 "## <version>", or "## <version> (important)" for a fix everyone needs. Then this:
-  1. sets tools/release.json to that version, and the dev build in src/ with it;
+  1. sets tools/release.json to that version, with a new quest pack number if quests/
+     changed since the last release, and the dev build in src/ with it;
   2. runs the offline tests, and stops if any fail;
   3. builds and signs the release (tools/build.py release): the zip in dist/, its
      signatures in tools/signatures.json and its changes in the README's "What's new";
@@ -25,10 +26,13 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(ROOT, "tools")
 sys.path.insert(0, TOOLS)
+import build  # noqa: E402
 import changelog  # noqa: E402
 import curseforge  # noqa: E402
+import ed25519  # noqa: E402
 
 RELEASE = os.path.join(TOOLS, "release.json")
+SIGNATURES = os.path.join(TOOLS, "signatures.json")
 ADDONS = os.environ.get("PINTO_ADDONS") or r"C:\Program Files\World of Warcraft\_forever_\Interface\AddOns"
 LUA_PLACES = [r"C:\Program Files\Lua\bin\lua.exe"]
 
@@ -57,6 +61,19 @@ def out_already(version):
     if p.returncode != 0:
         return None
     return bool(p.stdout.strip())
+
+
+def pack_changed(cfg, version):
+    """Whether quests/ changed since the last release signed this quest pack number. Two
+    different packs must never share a number: copies would keep whichever sorts first."""
+    if not os.path.exists(SIGNATURES):
+        return False
+    with open(SIGNATURES, encoding="utf-8") as f:
+        sig = json.load(f)
+    if sig.get("version") == version or sig.get("questPack") != cfg["questPack"]:
+        return False   # this release's own signatures, or its pack has a new number already
+    data = build.build_pack(cfg["questPack"])
+    return not ed25519.verify(bytes.fromhex(cfg["publicKey"]), data, bytes.fromhex(sig["packSig"]))
 
 
 def run(args, what):
@@ -118,11 +135,12 @@ def main(argv):
         say("(Couldn't ask GitHub whether %s is out yet, so carrying on.)" % version)
 
     important = changelog.important(log, version)
-    if cfg["version"] != version or cfg.get("important", False) != important:
-        cfg["version"], cfg["important"] = version, important
+    pack = cfg["questPack"] + 1 if pack_changed(cfg, version) else cfg["questPack"]
+    if cfg["version"] != version or cfg.get("important", False) != important or cfg["questPack"] != pack:
+        cfg["version"], cfg["important"], cfg["questPack"] = version, important, pack
         with open(RELEASE, "w", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(cfg, indent=2) + "\n")
-    say("Pinto %s%s\n" % (version, ", an important fix" if important else ""))
+    say("Pinto %s%s, quest pack %d\n" % (version, ", an important fix" if important else "", pack))
 
     run([sys.executable, "-I", os.path.join("tools", "build.py"), "dev"], "The dev build")
     if "--skip-tests" not in argv:

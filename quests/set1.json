@@ -3,50 +3,50 @@
   "templates": [
     {
       "id": 101, "worth": 1,
-      "text": "Party up and complete 5 quests with guildies.",
+      "text": "Turn in 5 quests with a guildie nearby in your group.",
       "goal": [["turnins", {"count": 5}]]
     },
     {
       "id": 102, "worth": 1,
-      "text": "Gain a level while you're grouped with a guildie.",
+      "text": "Gain a level with a guildie nearby in your group.",
       "needs": [["max_level", 59]],
       "goal": [["levelup", {}]]
     },
     {
       "id": 103, "worth": 2,
-      "text": "Run a dungeon with {X}, who has a quest to run one with you.",
+      "text": "Run a dungeon with {X}: their Pinto quest asks them to run one with you.",
       "needs": [["level", 13]],
       "names": [{"role": "X", "rules": [["pair"]]}],
       "goal": [["dungeon", {"with": "X"}]]
     },
     {
       "id": 104, "worth": 2,
-      "text": "Do a dungeon with {X}, who's active but rarely plays with you.",
+      "text": "Run a dungeon with {X}, who's active but rarely plays with you.",
       "needs": [["level", 13]],
       "names": [{"role": "X", "rules": [["online", 3], ["level_near", 5], ["rarely"]]}],
       "goal": [["dungeon", {"with": "X"}]]
     },
     {
       "id": 105, "worth": 1,
-      "text": "Take a low-gear member to a dungeon that suits their level.",
+      "text": "Run a dungeon with a guildie whose gear is low for their level.",
       "needs": [["level", 13], ["exists", "@low"]],
       "goal": [["dungeon", {"with": "@low"}]]
     },
     {
       "id": 106, "worth": 2,
-      "text": "Finish a group quest with at least 2 guildies: one marked Elite or Group in your quest log.",
+      "text": "Turn in a quest marked Elite or Group with at least 2 guildies nearby in your group.",
       "goal": [["turnins", {"count": 1, "group": true, "guildies": 2}]]
     },
     {
       "id": 107, "worth": 2,
-      "text": "New members only: ask {X} for help. {X} has a mid to high bridging rate, and the quest completes when you group with {X} for a quest or a dungeon.",
+      "text": "Ask {X} for help: they often bring guildies together. Quest or do a dungeon for 10 minutes with {X} in your group.",
       "needs": [["new"]],
       "names": [{"role": "X", "rules": [["online", 3], ["addon"], ["established"], ["bridger"]]}],
       "goal": [["group", {"with": "X", "act": ["quest", "dungeon"]}]]
     },
     {
       "id": 108, "worth": 3,
-      "text": "Bring {X} and {Y} together: they've never grouped with each other, so get them both into your group for a quest or a dungeon.",
+      "text": "Bring {X} and {Y} together: they've never grouped. Quest or do a dungeon for 10 minutes with both in your group.",
       "names": [
         {"role": "X", "rules": [["online", 3]]},
         {"role": "Y", "rules": [["online", 3], ["never_with", "X"]]}
@@ -55,18 +55,18 @@
     },
     {
       "id": 109, "worth": 2,
-      "text": "Do a quest with a new member.",
+      "text": "Quest for 10 minutes with a new member in your group.",
       "needs": [["established"], ["exists", "@new"]],
       "goal": [["group", {"with": "@new", "act": ["quest"]}]]
     },
     {
       "id": 110, "worth": 3,
-      "text": "Group with guildies on 3 different days this week.",
+      "text": "Group with a guildie for 10 minutes on 3 different days this week.",
       "goal": [["days", {"count": 3}]]
     },
     {
       "id": 111, "worth": 3,
-      "text": "Do 2 dungeons with at least 3 guildies this week.",
+      "text": "Run 2 dungeons with at least 3 other guildies this week.",
       "needs": [["level", 13]],
       "goal": [["dungeon", {"guildies": 3, "count": 2}]]
     },
@@ -75,6 +75,24 @@
       "text": "Run a dungeon with a full party of guildies.",
       "needs": [["level", 13]],
       "goal": [["dungeon", {"guildies": 4}]]
+    },
+    {
+      "id": 113, "worth": 2,
+      "text": "Invite someone new to the guild, and see them join.",
+      "needs": [["can_invite"], ["rare", 4], ["not_last_week", 113]],
+      "goal": [["invite", {}]]
+    },
+    {
+      "id": 114, "worth": 2,
+      "text": "Use /dance with 3 guildies nearby in your group, all within one minute.",
+      "needs": [["locale", "en"]],
+      "goal": [["dance", {"guildies": 3}]]
+    },
+    {
+      "id": 115, "worth": 2,
+      "text": "Be jolly together: use /cheer, /clap or /congratulate with 3 guildies nearby in your group, all within one minute. Any mix counts.",
+      "needs": [["locale", "en"]],
+      "goal": [["jolly", {"guildies": 3}]]
     }
   ]
 }

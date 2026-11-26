@@ -25,6 +25,8 @@ Track\Player.lua
 Track\Log.lua
 Track\Activity.lua
 Track\Trades.lua
+Track\Guild.lua
+Track\Trace.lua
 Health\Formula.lua
 Health\Health.lua
 Quests\Blocks.lua

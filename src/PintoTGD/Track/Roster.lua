@@ -38,6 +38,9 @@ function Roster.Scan()
   local members = {}
   for i = 1, total do
     local e = Compat.RosterEntry(i)
+    -- a row the client hides: the roster Pinto has stands until a scan it can read in full,
+    -- rather than a roster with members missing
+    if e == false then return false end
     if e and e.name then members[e.name] = e end
   end
   Roster.members = members

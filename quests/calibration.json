@@ -3,19 +3,19 @@
   "templates": [
     {
       "id": 1, "worth": 1,
-      "text": "Party up and complete 3 quests with guildies.",
+      "text": "Turn in 3 quests with a guildie nearby in your group.",
       "goal": [["turnins", {"count": 3}]]
     },
     {
       "id": 2, "worth": 2,
-      "text": "Make something for {X}, like gear they can use, a bag, food or bandages. Give it to them, and do a quest or a dungeon together.",
+      "text": "Make {X} something, like gear, a bag, food or bandages, and trade it to them. Then quest or do a dungeon for 10 minutes with them in your group.",
       "needs": [["makes"]],
       "names": [{"role": "X", "rules": [["online", 3]]}],
       "goal": [["give", {"to": "X", "kind": "crafted"}], ["group", {"with": "X", "act": ["quest", "dungeon"]}]]
     },
     {
       "id": 3, "worth": 1,
-      "text": "Fish or gather with a guildie: catch 10 fish or gather 10 times while you're grouped in the same zone.",
+      "text": "Catch fish, mine, pick herbs or skin 10 times in all, with a guildie nearby in your group.",
       "needs": [["any", [["gatherer"], ["secondary", "fish"]]]],
       "goal": [["gather", {"count": 10, "kinds": ["fish", "herb", "mine", "skin"]}]]
     },
@@ -28,41 +28,41 @@
     },
     {
       "id": 5, "worth": 2,
-      "text": "Do a quest with {X}, an active guildie you haven't grouped with this week.",
+      "text": "{X} is active, and you haven't grouped this week. Quest for 10 minutes with them in your group.",
       "names": [{"role": "X", "rules": [["online", 3], ["not_grouped_week"]]}],
       "goal": [["group", {"with": "X", "act": ["quest"]}]]
     },
     {
       "id": 6, "worth": 2,
-      "text": "Help {X}, a guildie at least 5 levels below you, with a quest or a dungeon.",
+      "text": "Help {X}, a guildie at least 5 levels below you: quest or do a dungeon for 10 minutes with them in your group.",
       "names": [{"role": "X", "rules": [["online", 3], ["level_below", 5]]}],
       "goal": [["group", {"with": "X", "act": ["quest", "dungeon"]}]]
     },
     {
       "id": 7, "worth": 2,
-      "text": "Finish a group quest with at least 2 guildies: one marked Elite or Group in your quest log.",
+      "text": "Turn in a quest marked Elite or Group with at least 2 guildies nearby in your group.",
       "goal": [["turnins", {"count": 1, "group": true, "guildies": 2}]]
     },
     {
       "id": 8, "worth": 2,
-      "text": "Run a dungeon with at least 2 guildies.",
+      "text": "Run a dungeon with at least 2 other guildies.",
       "needs": [["level", 13]],
       "goal": [["dungeon", {"guildies": 2}]]
     },
     {
       "id": 9, "worth": 2,
-      "text": "Do a quest or a dungeon with a new member.",
+      "text": "Quest or do a dungeon for 10 minutes with a new member in your group.",
       "needs": [["established"], ["exists", "@new"]],
       "goal": [["group", {"with": "@new", "act": ["quest", "dungeon"]}]]
     },
     {
       "id": 10, "worth": 3,
-      "text": "Group with 3 different guildies this week, for quests or a dungeon.",
+      "text": "Quest or do dungeons with 3 different guildies this week, 10 minutes with each in your group.",
       "goal": [["distinct", {"count": 3, "act": ["quest", "dungeon"]}]]
     },
     {
       "id": 11, "worth": 3,
-      "text": "Group with guildies on 3 different days this week.",
+      "text": "Group with a guildie for 10 minutes on 3 different days this week.",
       "goal": [["days", {"count": 3}]]
     },
     {

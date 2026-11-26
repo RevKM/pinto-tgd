@@ -1,9 +1,9 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "dataVersion": 1,
   "protocolVersion": 1,
   "formulaVersion": 1,
-  "questPack": 2,
+  "questPack": 3,
   "goLive": "2026-11-23",
   "important": false,
   "releaseUrl": "https://github.com/RevKM/pinto-tgd/releases/latest",

@@ -1,5 +1,6 @@
 -- The minimap button: Pinto's head on the edge of the minimap. Drag it around the
--- minimap; hover for Pinto's mood line; click to open the window size used last.
+-- minimap; hover for Pinto's mood line and, in a group, who counts as nearby; click to
+-- open the window size used last.
 -- When a Pinto quest finishes, a haunch pops up and the button gives a happy wiggle.
 -- A small haunch badge stays on it until Pinto has eaten. Notices slide out beside it for
 -- a few seconds, one at a time: the start notice after the login sync, and the others in
@@ -205,6 +206,22 @@ function MiniButton.Waiting()
 end
 function MiniButton.Button() return button, badge end
 
+-- The tooltip's text: Pinto's mood line and, in a group, who Pinto counts as nearby and
+-- why. Those are the lines /pinto nearby prints, here with nothing typed: after any
+-- addon's slash command the game closes its chat box under that addon's name, and that
+-- can raise an error in the game's own code (it did once, after a Battle.net whisper).
+local function tipText()
+  local text = UI.StatusLine()
+  if not ns.started or ns.disabled or not ns.Activity or not IsInGroup() then return text end
+  local ok, lines = pcall(ns.Activity.Describe)
+  if not ok then
+    ns.report(lines)
+    return text
+  end
+  local group = table.concat(lines, "\n")
+  return text and (text .. "\n\n" .. group) or group
+end
+
 function MiniButton.Init()
   if button or not Minimap then return end
   button = CreateFrame("Button", "PintoTGDMinimapButton", Minimap)
@@ -257,7 +274,7 @@ function MiniButton.Init()
   button:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", onDragUpdate) end)
   button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
   button:SetScript("OnClick", function() UI.ToggleLast() end)
-  button:SetScript("OnEnter", function(self) UI.ShowTip(self, "LEFT", "Pinto, the Girthy Dragon", UI.StatusLine()) end)
+  button:SetScript("OnEnter", function(self) UI.ShowTip(self, "LEFT", "Pinto, the Girthy Dragon", tipText()) end)
   button:SetScript("OnLeave", function(self) UI.HideTip(self) end)
   place()
   MiniButton.Refresh()
